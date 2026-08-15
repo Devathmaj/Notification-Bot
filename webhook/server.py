@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import discord
+from fastapi import Depends, FastAPI, HTTPException, Request
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse
+
+from config import settings
+from webhook.auth import ensure_valid_bearer
+from webhook.handlers import InvalidEvent, handle_event, validate_event
+
+logger = logging.getLogger("webhook")
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+def create_app(client: discord.Client) -> FastAPI:
+    app = FastAPI(title="Notification Webhook", version="0.1.0")
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Any:
+        retry_after = getattr(exc, "retry_after", None)
+        headers = {"Retry-After": str(int(retry_after)) if retry_after is not None else "60"}
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please slow down."},
+            headers=headers,
+        )
+
+    @app.get("/health", dependencies=[Depends(ensure_valid_bearer)])
+    @limiter.limit(settings.health_rate_limit)
+    async def health(request: Request) -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/webhook", dependencies=[Depends(ensure_valid_bearer)])
+    @limiter.limit(settings.webhook_rate_limit)
+    async def webhook(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            validate_event(payload)
+        except InvalidEvent as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        sent = await handle_event(payload, client)
+        return {"status": "ok", "sent": sent}
+
+    return app

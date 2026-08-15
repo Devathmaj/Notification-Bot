@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.git/
+bot.log
+bot.log.err
+tests/
+bot/discord/tests/
+bot/discord/**/node_modules/

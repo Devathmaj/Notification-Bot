@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notification-bot"
+version = "0.1.0"
+description = "Shared runtime for Discord and Telegram notification bots"
+requires-python = ">=3.11"
+dependencies = [
+    "discord.py>=2.4.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "slowapi>=0.1.9",
+    "SQLAlchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "aiosqlite>=0.20.0",
+    "ruff>=0.5.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["bot*", "webhook*"]
+
+[tool.setuptools.package-data]
+"discord" = ["py.typed"]
+"webhook" = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["bot/discord/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
