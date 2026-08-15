@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from bot.discord.database.connection import get_session_factory
 from bot.discord.database.models import DeliveryMethod, SentMessage
+from bot.telegram.bot.logging_utils import redact_chat_id
 from bot.telegram.database.groups import list_active_groups
 from bot.telegram.database.users import list_telegram_users
 
@@ -106,7 +107,7 @@ async def _send_message(bot: Any, chat_id: int, text: str) -> int | None:
         message = await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
         return message.message_id
     except Exception:
-        logger.debug("Telegram send to chat %s failed", chat_id, exc_info=True)
+        logger.debug("Telegram send to chat %s failed", redact_chat_id(chat_id), exc_info=True)
         return None
 
 

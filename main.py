@@ -19,6 +19,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
+_RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
+
+
+async def _retention_sweep() -> None:
+    from bot.retention import purge_expired_sent_messages
+
+    while True:
+        try:
+            removed = await purge_expired_sent_messages()
+            logger.info("Retention sweep removed %s stale sent messages", removed)
+        except Exception:
+            logger.exception("Retention sweep failed; retrying later")
+        await asyncio.sleep(_RETENTION_INTERVAL_SECONDS)
+
 
 async def _telegram_main(application) -> None:
     from bot.telegram.bot.client import start_application, stop_application
@@ -62,7 +76,10 @@ async def run() -> None:
 
     # One process, independent tasks: a webhook failure must not take the
     # Discord or Telegram bots offline, and vice versa.
-    tasks = [asyncio.create_task(_guarded("webhook server", server.serve()))]
+    tasks = [
+        asyncio.create_task(_guarded("webhook server", server.serve())),
+        asyncio.create_task(_guarded("retention sweep", _retention_sweep())),
+    ]
     if settings.has_discord_token:
         tasks.append(
             asyncio.create_task(_guarded("discord bot", bot.start(settings.discord_token)))

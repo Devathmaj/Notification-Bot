@@ -11,10 +11,11 @@ from bot.telegram.bot.commands import (
     handle_latest,
     handle_my_chat_member,
     handle_start,
+    handle_stop,
     handle_top,
 )
 from bot.telegram.database.groups import list_active_groups, upsert_telegram_group
-from bot.telegram.database.users import get_telegram_user
+from bot.telegram.database.users import get_telegram_user, upsert_telegram_user
 
 
 def make_user(uid=1, username="alice", first_name="Alice", last_name=None):
@@ -137,7 +138,7 @@ async def test_my_chat_member_add_upserts_group(db):
     assert [g.chat_id for g in groups] == [-1001]
 
 
-async def test_my_chat_member_leave_deactivates_group(db):
+async def test_my_chat_member_leave_removes_group(db):
     await upsert_telegram_group(chat_id=-1001, title="X", chat_type="supergroup")
     new_member = SimpleNamespace(status="left")
     chat = SimpleNamespace(id=-1001, title="X", type="supergroup")
@@ -146,6 +147,20 @@ async def test_my_chat_member_leave_deactivates_group(db):
 
     await handle_my_chat_member(update, make_context())
     assert await list_active_groups() == []
+
+
+async def test_stop_deletes_subscription(db):
+    await upsert_telegram_user(chat_id=1001, user_id=42)
+    ctx = make_context()
+    await handle_stop(make_update(chat_id=1001, user=make_user(uid=42)), ctx)
+    assert await get_telegram_user(1001) is None
+    assert "unsubscribed" in ctx.bot.send_message.await_args.kwargs["text"]
+
+
+async def test_stop_when_not_subscribed(db):
+    ctx = make_context()
+    await handle_stop(make_update(chat_id=1001, user=make_user(uid=42)), ctx)
+    assert ctx.bot.send_message.await_args.kwargs["text"].startswith("You weren't subscribed")
 
 
 async def test_latest_rate_limited(db):

@@ -8,14 +8,17 @@ from discord.ext import commands
 
 from bot.discord.bot.notifications import build_post_embed
 from bot.discord.database.channel_targets import (
+    delete_channel_targets_by_user,
     get_channel_target,
     list_channel_targets,
+    purge_channel_sent_history,
     remove_channel_target,
     upsert_channel_target,
 )
 from bot.discord.database.models import DeliveryMethod
 from bot.discord.database.posts import fetch_latest_posts
 from bot.discord.database.preferences import (
+    delete_preference,
     disable_dm,
     get_preference,
     set_dm,
@@ -24,6 +27,81 @@ from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter, parse_rate
 from config import settings
 
 MAX_TOP = 100
+
+_HELP_COLOR = 0x2ECC71
+
+_HELP_URLS = {
+    "privacy": "https://voucherbot-preview.pages.dev/#discord/privacy",
+    "terms": "https://voucherbot-preview.pages.dev/#discord/terms",
+    "disclaimer": "https://voucherbot-preview.pages.dev/#discord/disclaimer",
+    "permissions": "https://voucherbot-preview.pages.dev/#discord/permissions",
+}
+
+
+def build_help_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Voucher Bot · Help",
+        description=(
+            "I watch for new voucher alerts and deliver them to you directly in "
+            "DMs or to server channels that have a feed configured."
+        ),
+        color=_HELP_COLOR,
+    )
+
+    embed.add_field(
+        name="🔍 Commands · Queries",
+        value=(
+            "`/latest` — Fetch the newest notification with its full details "
+            "(vendor, discount, voucher code, certifications, expiry).\n"
+            "`/top <n>` — Fetch the `n` most recent notifications (1–100), "
+            "newest first."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="📣 Commands · Notifications",
+        value=(
+            "`/notify dm` — Send every new alert to your private chat.\n"
+            "`/notify channel <channel> [mention]` — Post every new alert to a "
+            "channel. Requires the **Manage Channels** permission; `mention` can "
+            "be `none`, `here`, or `everyone`.\n"
+            "`/notify list` — Show everything you currently have enabled.\n"
+            "`/notify off <target> [channel]` — Turn off DMs or remove a channel "
+            "feed."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="🗑️ Commands · Data",
+        value=(
+            "`/delete` — Erase all your stored data: DM preference, channel "
+            "feeds you created, and the associated delivery history.\n"
+            "`/help` — Show this message."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="ℹ️ Behaviour",
+        value=(
+            "• New alerts are posted automatically to every configured channel "
+            "feed.\n"
+            "• Private-chat alerts only arrive after you run `/notify dm`.\n"
+            "• Removing a feed or your DMs does not delete messages you already "
+            "received."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="⚖️ Legal",
+        value=(
+            f"• [Privacy policy]({_HELP_URLS['privacy']})\n"
+            f"• [Terms of service]({_HELP_URLS['terms']})\n"
+            f"• [Disclaimer]({_HELP_URLS['disclaimer']})\n"
+            f"• [Install permissions]({_HELP_URLS['permissions']})"
+        ),
+        inline=False,
+    )
+    return embed
 
 discord_limiter = WindowRateLimiter(*parse_rate(settings.discord_command_rate))
 
@@ -52,6 +130,14 @@ class NotificationCommands(commands.Cog):
             return
         embed = build_post_embed(posts[0])
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command(
+        name="help", description="Show the available commands and what the bot does"
+    )
+    async def help(self, interaction: discord.Interaction) -> None:
+        if await _rate_limited(interaction):
+            return
+        await interaction.response.send_message(embed=build_help_embed(), ephemeral=False)
 
     @app_commands.command(name="top", description="Fetch the `n` most recent notifications (1-100)")
     @app_commands.describe(n="How many notifications to fetch")
@@ -207,6 +293,35 @@ class NotificationCommands(commands.Cog):
             return
 
         await remove_channel_target(str(interaction.guild.id), str(channel.id))
+        await purge_channel_sent_history(str(interaction.guild.id), str(channel.id))
         await interaction.response.send_message(
             f"Removed the notification feed for {channel.mention}.", ephemeral=True
         )
+
+    @app_commands.command(
+        name="delete",
+        description="Delete all your stored notification data (DMs and channel feeds)",
+    )
+    async def delete_data(self, interaction: discord.Interaction) -> None:
+        pref_removed = await delete_preference(interaction.user.id)
+        my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)
+        feeds_removed = await delete_channel_targets_by_user(interaction.user.id)
+        history_purged = 0
+        for target in my_targets:
+            history_purged += await purge_channel_sent_history(
+                target.guild_id, target.channel_id
+            )
+
+        parts = []
+        if pref_removed:
+            parts.append("DM preference deleted")
+        if feeds_removed:
+            plural = "" if feeds_removed == 1 else "s"
+            parts.append(f"{feeds_removed} channel feed deletion{plural}")
+            history_plural = "" if history_purged == 1 else "s"
+            parts.append(f"{history_purged} channel history removal{history_plural}")
+        if not parts:
+            message = "You have no stored notification data to delete."
+        else:
+            message = "Deleted your notification data: " + "; ".join(parts) + "."
+        await interaction.response.send_message(message, ephemeral=True)

@@ -1,4 +1,8 @@
+from sqlalchemy import select
+
+from bot.discord.database.models import DeliveryMethod, SentMessage
 from bot.telegram.database.users import (
+    delete_telegram_user,
     get_telegram_user,
     list_telegram_users,
     upsert_telegram_user,
@@ -43,3 +47,35 @@ async def test_bigint_chat_id(db):
 
 async def test_get_missing_returns_none(db):
     assert await get_telegram_user(9999) is None
+
+
+async def test_delete_removes_user(db):
+    await upsert_telegram_user(chat_id=111, user_id=222)
+    assert await delete_telegram_user(111) is True
+    assert await get_telegram_user(111) is None
+
+
+async def test_delete_missing_returns_false(db):
+    assert await delete_telegram_user(9999) is False
+
+
+async def test_delete_preserves_delivery_logs(db):
+    await upsert_telegram_user(chat_id=111, user_id=222)
+    async with db() as session:
+        session.add(
+            SentMessage(
+                platform="telegram",
+                delivery_kind=DeliveryMethod.dm,
+                post_id="123",
+                recipient_id="111",
+                telegram_message_id="42",
+            )
+        )
+        await session.commit()
+
+    assert await delete_telegram_user(111) is True
+
+    async with db() as session:
+        rows = (await session.execute(select(SentMessage))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].recipient_id == "111"

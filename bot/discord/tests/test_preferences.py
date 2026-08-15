@@ -1,4 +1,5 @@
 from bot.discord.database.preferences import (
+    delete_preference,
     disable_dm,
     get_preference,
     list_preferences,
@@ -37,3 +38,13 @@ async def test_list_preferences(db):
     await set_dm(2)
     prefs = await list_preferences()
     assert [p.user_id for p in prefs] == [1, 2]
+
+
+async def test_delete_preference_removes_row(db):
+    await set_dm(303)
+    assert await delete_preference(303) is True
+    assert await get_preference(303) is None
+
+
+async def test_delete_preference_missing_returns_false(db):
+    assert await delete_preference(9999) is False

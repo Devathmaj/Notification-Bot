@@ -10,9 +10,14 @@ from telegram.ext.filters import ChatType
 
 from bot.discord.database.posts import fetch_latest_posts
 from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter, parse_rate
+from bot.telegram.bot.logging_utils import redact_chat_id
 from bot.telegram.bot.notifications import render_post_message
-from bot.telegram.database.groups import deactivate_telegram_group, upsert_telegram_group
-from bot.telegram.database.users import upsert_telegram_user
+from bot.telegram.database.groups import (
+    delete_telegram_group,
+    purge_group_sent_history,
+    upsert_telegram_group,
+)
+from bot.telegram.database.users import delete_telegram_user, upsert_telegram_user
 from config import settings
 
 logger = logging.getLogger("telegram.bot.commands")
@@ -43,21 +48,30 @@ def _rate_limited(handler):
 _ADDED_STATUSES = {"member", "administrator", "restricted", "creator"}
 _LEFT_STATUSES = {"left", "kicked"}
 
-# TODO: replace the placeholders below with the bot's general behaviour notes.
 HELP_TEXT = (
     "<b>Notification Bot</b>\n\n"
-    "I watch for new voucher alerts on <i>this</i> service and deliver them to you "
-    "directly or to any group I am added to.\n\n"
+    "I watch for new voucher alerts and deliver them to you directly in this "
+    "chat or to any group I am added to.\n\n"
     "<b>Commands</b>\n"
-    "• /start — subscribe to notifications in this chat\n"
-    "• /latest — show the newest notification\n"
-    "• /top &lt;n&gt; — show the n most recent notifications (1-100)\n"
-    "• /help — this message\n\n"
+    "• /start — subscribe to notifications in this private chat\n"
+    "• /latest — show the newest notification with its full details (vendor, "
+    "discount, voucher code, certifications, expiry)\n"
+    "• /top &lt;n&gt; — show the n most recent notifications, newest first "
+    "(1–100)\n"
+    "• /stop — unsubscribe and delete your stored data\n"
+    "• /help — show this message\n\n"
     "<b>Behaviour</b>\n"
     "• If I'm in a group chat, new alerts are posted there automatically.\n"
     "• In a private chat, new alerts are sent to you after /start.\n"
-    "• Commands can be used in group chats and private chats.\n\n"
-    "<i>General info will be added here later.</i>"
+    "• Commands work in private chats and groups.\n"
+    "• Unsubscribing does not delete earlier messages you received.\n\n"
+    "<b>Links</b>\n"
+    "• Privacy policy: <a href=\"https://voucherbot-preview.pages.dev/#telegram/privacy\">"
+    "voucherbot-preview.pages.dev/#telegram/privacy</a>\n"
+    "• Terms of service: <a href=\"https://voucherbot-preview.pages.dev/#telegram/terms\">"
+    "voucherbot-preview.pages.dev/#telegram/terms</a>\n"
+    "• Disclaimer: <a href=\"https://voucherbot-preview.pages.dev/#telegram/disclaimer\">"
+    "voucherbot-preview.pages.dev/#telegram/disclaimer</a>\n"
 )
 
 
@@ -128,6 +142,26 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await _reply(update, context, HELP_TEXT, parse_mode="HTML")
 
 
+@_rate_limited
+async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat = update.effective_chat
+    deleted = await delete_telegram_user(chat.id)
+    if deleted:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=(
+                "You've been unsubscribed and your data has been deleted. "
+                "Send /start anytime to resubscribe."
+            ),
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text="You weren't subscribed, so there was nothing to delete. "
+            "Send /start to subscribe.",
+        )
+
+
 async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     member = update.my_chat_member
     if member is None:
@@ -136,14 +170,16 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
     status = member.new_chat_member.status
     if status in _ADDED_STATUSES:
         await upsert_telegram_group(chat_id=chat.id, title=chat.title, chat_type=chat.type)
-        logger.info("Bot added to chat %s (%s)", chat.id, chat.type)
+        logger.info("Bot added to chat %s (%s)", redact_chat_id(chat.id), chat.type)
     elif status in _LEFT_STATUSES:
-        await deactivate_telegram_group(chat.id)
-        logger.info("Bot removed from chat %s", chat.id)
+        await delete_telegram_group(chat.id)
+        await purge_group_sent_history(chat.id)
+        logger.info("Bot removed from chat %s", redact_chat_id(chat.id))
 
 
 def register_handlers(application) -> None:
     application.add_handler(CommandHandler("start", handle_start, filters=ChatType.PRIVATE))
+    application.add_handler(CommandHandler("stop", handle_stop, filters=ChatType.PRIVATE))
     application.add_handler(CommandHandler("latest", handle_latest))
     application.add_handler(CommandHandler("top", handle_top))
     application.add_handler(CommandHandler("help", handle_help))

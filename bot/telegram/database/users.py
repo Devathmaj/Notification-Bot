@@ -42,3 +42,18 @@ async def list_telegram_users(subscribed: bool | None = True) -> list[TelegramUs
             stmt = stmt.where(TelegramUser.subscribed.is_(subscribed))
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+
+async def delete_telegram_user(chat_id: int) -> bool:
+    """Erase a private-chat subscription (used by /stop).
+
+    Deleting the row removes the chat from the notification target list, so
+    delivery stops. Sent-message/audit rows are intentionally preserved.
+    """
+    async with get_session_factory()() as session:
+        user = await session.get(TelegramUser, chat_id)
+        if user is None:
+            return False
+        await session.delete(user)
+        await session.commit()
+        return True
