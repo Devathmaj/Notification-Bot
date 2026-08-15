@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     webhook_host: str = Field(default="0.0.0.0", description="Bind host for the webhook server")
     webhook_port: int = Field(default=43217, description="Bind port for the webhook server")
 
+    # Per-user command rate limits (slowapi-style "N/minute" windows)
+    discord_command_rate: str = Field(
+        default="20/minute", description="Max commands per user per window (Discord)"
+    )
+    telegram_command_rate: str = Field(
+        default="20/minute", description="Max commands per user per window (Telegram)"
+    )
+
     # Database
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:PASSWORD@localhost:5432/postgres",

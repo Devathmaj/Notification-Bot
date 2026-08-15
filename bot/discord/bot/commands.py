@@ -20,8 +20,21 @@ from bot.discord.database.preferences import (
     get_preference,
     set_dm,
 )
+from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter, parse_rate
+from config import settings
 
 MAX_TOP = 100
+
+discord_limiter = WindowRateLimiter(*parse_rate(settings.discord_command_rate))
+
+
+async def _rate_limited(interaction: discord.Interaction) -> bool:
+    """Consume the user's command budget; reply and return True when throttled."""
+    if discord_limiter.allow(f"discord:{interaction.user.id}"):
+        return False
+    if not interaction.response.is_done():
+        await interaction.response.send_message(RATE_LIMIT_TEXT, ephemeral=True)
+    return True
 
 
 class NotificationCommands(commands.Cog):
@@ -30,6 +43,8 @@ class NotificationCommands(commands.Cog):
 
     @app_commands.command(name="latest", description="Fetch the latest notification")
     async def latest(self, interaction: discord.Interaction) -> None:
+        if await _rate_limited(interaction):
+            return
         await interaction.response.defer(ephemeral=False)
         posts = await fetch_latest_posts(limit=1)
         if not posts:
@@ -43,6 +58,8 @@ class NotificationCommands(commands.Cog):
     async def top(
         self, interaction: discord.Interaction, n: app_commands.Range[int, 1, MAX_TOP]
     ) -> None:
+        if await _rate_limited(interaction):
+            return
         await interaction.response.defer(ephemeral=False)
         posts = await fetch_latest_posts(limit=n)
         if not posts:

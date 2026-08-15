@@ -36,7 +36,7 @@ include = ["bot*", "webhook*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["bot/discord/tests", "bot/telegram/tests"]
+testpaths = ["bot/discord/tests", "bot/telegram/tests", "bot/tests"]
 
 [tool.ruff]
 line-length = 100

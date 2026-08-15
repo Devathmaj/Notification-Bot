@@ -6,7 +6,18 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from bot.discord.database.connection import dispose_engine, set_engine_for_tests
 from bot.discord.database.models import Base
+from bot.rate_limit import WindowRateLimiter
 from bot.telegram.database import models as _telegram_models  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _reset_telegram_limiter():
+    from bot.telegram.bot import commands
+
+    original = commands.telegram_limiter
+    commands.telegram_limiter = WindowRateLimiter(10_000, 3600)
+    yield
+    commands.telegram_limiter = original
 
 
 @pytest_asyncio.fixture

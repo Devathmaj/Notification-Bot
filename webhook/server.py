@@ -9,6 +9,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
+from sqlalchemy import text
 from starlette.responses import JSONResponse
 from telegram import Update
 from telegram.ext import Application
@@ -20,6 +21,19 @@ from webhook.handlers import InvalidEvent, handle_event, validate_event
 logger = logging.getLogger("webhook")
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+async def _database_ok() -> bool:
+    """Return True when the shared DB engine can answer a trivial query."""
+    try:
+        from bot.discord.database.connection import get_session_factory
+
+        async with get_session_factory()() as session:
+            await session.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        logger.warning("Health check: database unreachable", exc_info=True)
+        return False
 
 
 def create_app(client: discord.Client, telegram_application: Application | None = None) -> FastAPI:
@@ -37,10 +51,12 @@ def create_app(client: discord.Client, telegram_application: Application | None 
             headers=headers,
         )
 
-    @app.get("/health", dependencies=[Depends(ensure_valid_bearer)])
+    @app.get("/health")
     @limiter.limit(settings.health_rate_limit)
     async def health(request: Request) -> dict[str, str]:
-        return {"status": "ok"}
+        if not await _database_ok():
+            raise HTTPException(status_code=503, detail="Database unreachable")
+        return {"status": "ok", "database": "ok"}
 
     @app.post("/webhook", dependencies=[Depends(ensure_valid_bearer)])
     @limiter.limit(settings.webhook_rate_limit)

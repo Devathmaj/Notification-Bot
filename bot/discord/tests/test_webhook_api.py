@@ -63,9 +63,21 @@ def test_webhook_rejects_missing_fields(client):
     assert resp.status_code == 400
 
 
-def test_health_requires_auth(client):
-    assert client.get("/health").status_code == 401
-    assert client.get("/health", headers=_auth()).status_code == 200
+def test_health_public_ok(client, monkeypatch):
+    async def _ok() -> bool:
+        return True
+
+    monkeypatch.setattr("webhook.server._database_ok", _ok)
+    assert client.get("/health").status_code == 200
+
+
+def test_health_degraded_when_db_down(client, monkeypatch):
+    async def _down() -> bool:
+        return False
+
+    monkeypatch.setattr("webhook.server._database_ok", _down)
+    resp = client.get("/health")
+    assert resp.status_code == 503
 
 
 async def test_webhook_valid_event_dispatches_async(sample_payload, db):

@@ -2,20 +2,43 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from functools import wraps
 
 from telegram import Update
 from telegram.ext import ChatMemberHandler, CommandHandler, ContextTypes
 from telegram.ext.filters import ChatType
 
 from bot.discord.database.posts import fetch_latest_posts
+from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter, parse_rate
 from bot.telegram.bot.notifications import render_post_message
 from bot.telegram.database.groups import deactivate_telegram_group, upsert_telegram_group
 from bot.telegram.database.users import upsert_telegram_user
+from config import settings
 
 logger = logging.getLogger("telegram.bot.commands")
 
 MAX_TOP = 100
 _PACE_SECONDS = 0.35
+
+telegram_limiter = WindowRateLimiter(*parse_rate(settings.telegram_command_rate))
+
+
+def _rate_limited(handler):
+    @wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        key = (
+            update.effective_user.id
+            if update.effective_user is not None
+            else update.effective_chat.id
+        )
+        if not telegram_limiter.allow(f"telegram:{key}"):
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text=RATE_LIMIT_TEXT
+            )
+            return
+        return await handler(update, context)
+
+    return wrapper
 
 _ADDED_STATUSES = {"member", "administrator", "restricted", "creator"}
 _LEFT_STATUSES = {"left", "kicked"}
@@ -51,6 +74,7 @@ async def _send_paced(update: Update, context: ContextTypes.DEFAULT_TYPE, text: 
     await asyncio.sleep(_PACE_SECONDS)
 
 
+@_rate_limited
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     chat = update.effective_chat
@@ -72,6 +96,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+@_rate_limited
 async def handle_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     posts = await fetch_latest_posts(limit=1)
     if not posts:
@@ -80,6 +105,7 @@ async def handle_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _reply(update, context, render_post_message(posts[0]), parse_mode="HTML")
 
 
+@_rate_limited
 async def handle_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     raw = " ".join(context.args or []).strip()
     try:
@@ -97,6 +123,7 @@ async def handle_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await _send_paced(update, context, render_post_message(post))
 
 
+@_rate_limited
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(update, context, HELP_TEXT, parse_mode="HTML")
 

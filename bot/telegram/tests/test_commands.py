@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter
+from bot.telegram.bot import commands as telegram_commands
 from bot.telegram.bot.commands import (
     HELP_TEXT,
     handle_help,
@@ -144,3 +146,13 @@ async def test_my_chat_member_leave_deactivates_group(db):
 
     await handle_my_chat_member(update, make_context())
     assert await list_active_groups() == []
+
+
+async def test_latest_rate_limited(db):
+    telegram_commands.telegram_limiter = WindowRateLimiter(1, 60)
+    ctx = make_context()
+    with patch("bot.telegram.bot.commands.fetch_latest_posts", new=AsyncMock(return_value=[])):
+        await handle_latest(make_update(chat_id=7, user=make_user(uid=7)), ctx)
+        await handle_latest(make_update(chat_id=7, user=make_user(uid=7)), ctx)
+    texts = [call.kwargs["text"] for call in ctx.bot.send_message.call_args_list]
+    assert texts == ["No notifications yet.", RATE_LIMIT_TEXT]
