@@ -18,6 +18,24 @@ class Settings(BaseSettings):
     # Discord
     discord_token: str = Field(default="", description="Discord bot token")
 
+    # Telegram
+    telegram_http_api_token: str = Field(default="", description="Telegram bot token (BotFather)")
+    telegram_http_api_base_url: str | None = Field(
+        default=None,
+        description="Base URL of a self-hosted Telegram HTTP API server, if any",
+    )
+    telegram_webhook_url: str = Field(
+        default="",
+        description="Full public https URL where Telegram POSTs updates (*/telegram/webhook)",
+    )
+    telegram_webhook_secret: str = Field(
+        default="",
+        description=(
+            "Secret token passed to setWebhook and checked via the "
+            "X-Telegram-Bot-Api-Secret-Token header"
+        ),
+    )
+
     # Webhook server
     webhook_secret: str = Field(default="", description="Bearer secret for incoming webhooks")
     webhook_rate_limit: str = Field(
@@ -39,6 +57,10 @@ class Settings(BaseSettings):
     @property
     def has_discord_token(self) -> bool:
         return bool(self.discord_token)
+
+    @property
+    def has_telegram_token(self) -> bool:
+        return bool(self.telegram_http_api_token)
 
 
 @lru_cache

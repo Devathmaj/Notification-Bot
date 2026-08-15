@@ -4,7 +4,8 @@ from typing import Any
 
 import discord
 
-from bot.discord.bot.notifications import notify_for_post
+from bot.discord.bot.notifications import notify_for_post as notify_discord
+from bot.telegram.bot.notifications import notify_for_post as notify_telegram
 
 EXPECTED_EVENT = "voucher_alert"
 
@@ -50,10 +51,20 @@ def validate_event(payload: dict[str, Any]) -> dict[str, Any]:
     return build_post(payload)
 
 
-async def handle_event(payload: dict[str, Any], client: discord.Client) -> int:
+async def handle_event(
+    payload: dict[str, Any],
+    client: discord.Client | None = None,
+    telegram_application: Any | None = None,
+) -> int:
     """Process a voucher alert. Returns the number of notifications delivered.
 
-    Per-user dedup lives in notify_for_post, so webhook retries never double-send.
+    Delivers to whichever platforms have a client wired in. Per-recipient dedup
+    lives in the platform notifiers, so webhook retries never double-send.
     """
     post = validate_event(payload)
-    return await notify_for_post(client, post)
+    total = 0
+    if client is not None:
+        total += await notify_discord(client, post)
+    if telegram_application is not None:
+        total += await notify_telegram(telegram_application, post)
+    return total

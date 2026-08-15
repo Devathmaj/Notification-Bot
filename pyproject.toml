@@ -16,6 +16,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.3.0",
+    "python-telegram-bot>=21.0",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +36,7 @@ include = ["bot*", "webhook*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["bot/discord/tests"]
+testpaths = ["bot/discord/tests", "bot/telegram/tests"]
 
 [tool.ruff]
 line-length = 100

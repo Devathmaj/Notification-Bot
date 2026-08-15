@@ -62,6 +62,8 @@ def _schema_current(sync_conn) -> bool:
     sent_cols = {c["name"] for c in insp.get_columns("sent_messages")}
     if "dm_enabled" not in prefs_cols or "recipient_id" not in sent_cols:
         return False
+    if "telegram_message_id" not in sent_cols:
+        return False
     post_id_len = next(
         (
             c["type"].length
@@ -144,6 +146,13 @@ async def ensure_schema() -> None:
                         "delivery_kind varchar(10) NOT NULL DEFAULT 'dm'"
                     )
                 )
+                # Optional outbound message id recorded for Telegram deliveries.
+                await conn.execute(
+                    text(
+                        "ALTER TABLE sent_messages ADD COLUMN IF NOT EXISTS "
+                        "telegram_message_id varchar(40)"
+                    )
+                )
                 await conn.execute(
                     text(
                         "ALTER TABLE sent_messages ADD COLUMN IF NOT EXISTS "
@@ -198,7 +207,8 @@ async def ensure_schema() -> None:
             await conn.execute(
                 text(
                     "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "
-                    f'preferences, sent_messages, channel_targets TO "{role}"'
+                    f'preferences, sent_messages, channel_targets, telegram_users, '
+                    f'telegram_groups TO "{role}"'
                 )
             )
             await conn.execute(

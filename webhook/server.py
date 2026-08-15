@@ -10,6 +10,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
+from telegram import Update
+from telegram.ext import Application
 
 from config import settings
 from webhook.auth import ensure_valid_bearer
@@ -20,7 +22,7 @@ logger = logging.getLogger("webhook")
 limiter = Limiter(key_func=get_remote_address)
 
 
-def create_app(client: discord.Client) -> FastAPI:
+def create_app(client: discord.Client, telegram_application: Application | None = None) -> FastAPI:
     app = FastAPI(title="Notification Webhook", version="0.1.0")
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
@@ -48,7 +50,22 @@ def create_app(client: discord.Client) -> FastAPI:
         except InvalidEvent as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        sent = await handle_event(payload, client)
+        sent = await handle_event(payload, client, telegram_application)
         return {"status": "ok", "sent": sent}
+
+    @app.post("/telegram/webhook")
+    async def telegram_webhook(request: Request) -> dict[str, str]:
+        if telegram_application is None:
+            raise HTTPException(status_code=503, detail="Telegram bot not configured")
+
+        if settings.telegram_webhook_secret:
+            token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+            if token != settings.telegram_webhook_secret:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+
+        payload = await request.json()
+        update = Update.de_json(payload, telegram_application.bot)
+        await telegram_application.process_update(update)
+        return {"status": "ok"}
 
     return app

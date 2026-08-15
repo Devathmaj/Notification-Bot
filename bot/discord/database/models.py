@@ -82,6 +82,7 @@ class SentMessage(Base):
     recipient_id: Mapped[str] = mapped_column(String(40), index=True)
     guild_id: Mapped[int | None] = mapped_column(String(20), nullable=True)
     discord_message_id: Mapped[int | None] = mapped_column(String(20), nullable=True)
+    telegram_message_id: Mapped[int | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     preference_id: Mapped[int | None] = mapped_column(
