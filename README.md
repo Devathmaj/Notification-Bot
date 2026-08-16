@@ -100,7 +100,7 @@ The webhook server binds to the `PORT` environment variable (set automatically b
 
 `POST /webhook` with header `Authorization: Bearer <WEBHOOK_SECRET>` and a JSON payload for the `voucher_alert` event. The service uses `title`, `post`, `claim_url`, `vendor`, `promotion_name`, `promotion_type`, `voucher_code`, `discount`, `reason`, `confidence`, `certifications`, and `regions`. `sent_at` is used as the post's timestamp. The webhook is validated, then `200` is returned with the number of deliveries made; retries are deduplicated per recipient.
 
-Health check: `GET /health` returns `{"status": "ok"}` when the database answers a trivial query.
+Health check: `HEAD /health` returns `200` when the database answers a trivial query.
 
 ## Layout
 

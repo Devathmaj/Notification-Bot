@@ -51,7 +51,7 @@ def create_app(client: discord.Client, telegram_application: Application | None 
             headers=headers,
         )
 
-    @app.get("/health")
+    @app.head("/health")
     @limiter.limit(settings.health_rate_limit)
     async def health(request: Request) -> dict[str, str]:
         if not await _database_ok():

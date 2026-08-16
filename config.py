@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     webhook_rate_limit: str = Field(
         default="10/minute", description="Per-IP limit on POST /webhook"
     )
-    health_rate_limit: str = Field(default="30/minute", description="Per-IP limit on GET /health")
+    health_rate_limit: str = Field(default="30/minute", description="Per-IP limit on HEAD /health")
     webhook_host: str = Field(default="0.0.0.0", description="Bind host for the webhook server")
     webhook_port: int = Field(
         default=43217,

@@ -68,7 +68,7 @@ def test_health_public_ok(client, monkeypatch):
         return True
 
     monkeypatch.setattr("webhook.server._database_ok", _ok)
-    assert client.get("/health").status_code == 200
+    assert client.head("/health").status_code == 200
 
 
 def test_health_degraded_when_db_down(client, monkeypatch):
@@ -76,7 +76,7 @@ def test_health_degraded_when_db_down(client, monkeypatch):
         return False
 
     monkeypatch.setattr("webhook.server._database_ok", _down)
-    resp = client.get("/health")
+    resp = client.head("/health")
     assert resp.status_code == 503
 
 
