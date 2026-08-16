@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,7 +43,11 @@ class Settings(BaseSettings):
     )
     health_rate_limit: str = Field(default="30/minute", description="Per-IP limit on GET /health")
     webhook_host: str = Field(default="0.0.0.0", description="Bind host for the webhook server")
-    webhook_port: int = Field(default=43217, description="Bind port for the webhook server")
+    webhook_port: int = Field(
+        default=43217,
+        validation_alias=AliasChoices("PORT", "WEBHOOK_PORT"),
+        description="Bind port for the webhook server (Render sets PORT)",
+    )
 
     # Per-user command rate limits (slowapi-style "N/minute" windows)
     discord_command_rate: str = Field(

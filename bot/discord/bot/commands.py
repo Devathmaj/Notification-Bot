@@ -49,7 +49,7 @@ def build_help_embed() -> discord.Embed:
     )
 
     embed.add_field(
-        name="🔍 Commands · Queries",
+        name="Commands · Queries",
         value=(
             "`/latest` — Fetch the newest notification with its full details "
             "(vendor, discount, voucher code, certifications, expiry).\n"
@@ -59,7 +59,7 @@ def build_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name="📣 Commands · Notifications",
+        name="Commands · Notifications",
         value=(
             "`/notify dm` — Send every new alert to your private chat.\n"
             "`/notify channel <channel> [mention]` — Post every new alert to a "
@@ -72,7 +72,7 @@ def build_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name="🗑️ Commands · Data",
+        name="Commands · Data",
         value=(
             "`/delete` — Erase all your stored data: DM preference, channel "
             "feeds you created, and the associated delivery history.\n"
@@ -81,7 +81,7 @@ def build_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name="ℹ️ Behaviour",
+        name="Behaviour",
         value=(
             "• New alerts are posted automatically to every configured channel "
             "feed.\n"
@@ -92,7 +92,7 @@ def build_help_embed() -> discord.Embed:
         inline=False,
     )
     embed.add_field(
-        name="⚖️ Legal",
+        name="Legal",
         value=(
             f"• [Privacy policy]({_HELP_URLS['privacy']})\n"
             f"• [Terms of service]({_HELP_URLS['terms']})\n"

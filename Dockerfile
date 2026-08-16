@@ -19,5 +19,5 @@ RUN pip install --no-cache-dir .
 # Run the single process that hosts both the Discord bot and the webhook.
 CMD ["python", "-m", "main"]
 
-# Expose the webhook server port (config override: WEBHOOK_PORT env var).
+# Bind the Render-provided PORT (config override: PORT env var).
 EXPOSE 43217

@@ -6,11 +6,11 @@ def test_help_embed_structure():
     assert embed.title == "Voucher Bot · Help"
     names = [field.name for field in embed.fields]
     assert names == [
-        "🔍 Commands · Queries",
-        "📣 Commands · Notifications",
-        "🗑️ Commands · Data",
-        "ℹ️ Behaviour",
-        "⚖️ Legal",
+        "Commands · Queries",
+        "Commands · Notifications",
+        "Commands · Data",
+        "Behaviour",
+        "Legal",
     ]
 
 
