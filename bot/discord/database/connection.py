@@ -202,6 +202,20 @@ async def ensure_schema() -> None:
             except Exception:
                 logger.warning("Could not apply schema upgrades (ignoring)", exc_info=True)
 
+        if created:
+            # Internal tables, not per-user data: disable RLS so the DML-only
+            # app role can write (Supabase enables RLS on tables it creates).
+            for table in (
+                "preferences",
+                "sent_messages",
+                "channel_targets",
+                "telegram_users",
+                "telegram_groups",
+            ):
+                await conn.execute(
+                    text(f"ALTER TABLE public.{table} DISABLE ROW LEVEL SECURITY")
+                )
+
         if created and settings.db_app_user:
             role = settings.db_app_user
             await conn.execute(
