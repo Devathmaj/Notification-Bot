@@ -178,6 +178,8 @@ class NotificationCommands(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="latest", description="Fetch the latest notification")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def latest(self, interaction: discord.Interaction) -> None:
         if await _rate_limited(interaction):
             return
@@ -192,6 +194,8 @@ class NotificationCommands(commands.Cog):
     @app_commands.command(
         name="help", description="Show the available commands and what the bot does"
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def help(self, interaction: discord.Interaction) -> None:
         if await _rate_limited(interaction):
             return
@@ -200,6 +204,8 @@ class NotificationCommands(commands.Cog):
     @app_commands.command(
         name="about", description="Learn what this bot is about and find useful links"
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def about(self, interaction: discord.Interaction) -> None:
         if await _rate_limited(interaction):
             return
@@ -207,6 +213,8 @@ class NotificationCommands(commands.Cog):
 
     @app_commands.command(name="top", description="Fetch the `n` most recent notifications (1-100)")
     @app_commands.describe(n="How many notifications to fetch")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def top(
         self, interaction: discord.Interaction, n: app_commands.Range[int, 1, MAX_TOP]
     ) -> None:
@@ -368,6 +376,8 @@ class NotificationCommands(commands.Cog):
         name="delete",
         description="Delete all your stored notification data (DMs and channel feeds)",
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def delete_data(self, interaction: discord.Interaction) -> None:
         pref_removed = await delete_preference(interaction.user.id)
         my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)

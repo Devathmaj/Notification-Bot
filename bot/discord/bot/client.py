@@ -9,6 +9,8 @@ from bot.discord.bot.commands import NotificationCommands
 
 logger = logging.getLogger("discord.bot")
 
+_BOT_STATUS = "/about | /help | https://voucherbot-preview.pages.dev"
+
 
 class NotificationBot(commands.Bot):
     def __init__(self) -> None:
@@ -30,5 +32,9 @@ def build_bot() -> NotificationBot:
     @bot.event
     async def on_ready() -> None:
         logger.info("Logged in as %s (id=%s)", bot.user, bot.user.id)
+        try:
+            await bot.change_presence(activity=discord.CustomActivity(name=_BOT_STATUS))
+        except discord.HTTPException:
+            logger.warning("Could not set the bot's custom status")
 
     return bot
