@@ -30,12 +30,69 @@ MAX_TOP = 100
 
 _HELP_COLOR = 0x2ECC71
 
+_WEBSITE_URL = "https://voucherbot-preview.pages.dev/"
+
+_SOURCE_URL = "https://github.com/Devathmaj/VoucherBot"
+
 _HELP_URLS = {
     "privacy": "https://voucherbot-preview.pages.dev/#discord/privacy",
     "terms": "https://voucherbot-preview.pages.dev/#discord/terms",
     "disclaimer": "https://voucherbot-preview.pages.dev/#discord/disclaimer",
     "permissions": "https://voucherbot-preview.pages.dev/#discord/permissions",
 }
+
+
+def build_about_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Voucher Bot · About",
+        url=_WEBSITE_URL,
+        color=_HELP_COLOR,
+    )
+
+    embed.description = (
+        "I'm the notification service for **VoucherBot** — an open-source aggregator "
+        "that continuously monitors vendor sites, training providers, and community "
+        "sources for certification discounts, free exam vouchers, beta exams, and "
+        "training promotions. Automated (AI-assisted) analysis reviews each finding "
+        "and flags likely offers — flagged items are published with their source and "
+        "dates, never as a verification of the offer. This bot delivers every new "
+        "listing straight to you, the moment it is discovered.\n\n"
+        f"Everything collected so far: **[{_WEBSITE_URL}]({_WEBSITE_URL})**"
+    )
+
+    embed.add_field(
+        name="Website",
+        value=(
+            f"Browse everything VoucherBot has collected, see how discovery works, "
+            f"and read the full notification setup guide at **[{_WEBSITE_URL}]({_WEBSITE_URL})**."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="What I do here",
+        value=(
+            "• Push each new listing to your DMs (after `/notify dm`) and to any "
+            "channel feed configured via `/notify channel`.\n"
+            "• Answer on-demand queries: `/latest` for the newest post, `/top <n>` "
+            "for the recent ones.\n"
+            "• Deliver each alert exactly once — retries are deduplicated.\n"
+            "• Stay privacy-first: `/delete` erases all your stored data anytime."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Source code",
+        value=(
+            f"The collection pipeline is open source: [{_SOURCE_URL}]({_SOURCE_URL})."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Commands",
+        value="Use `/help` to see all available commands and what they do.",
+        inline=False,
+    )
+    return embed
 
 
 def build_help_embed() -> discord.Embed:
@@ -76,6 +133,7 @@ def build_help_embed() -> discord.Embed:
         value=(
             "`/delete` — Erase all your stored data: DM preference, channel "
             "feeds you created, and the associated delivery history.\n"
+            "`/about` — Learn what this bot is about and find useful links.\n"
             "`/help` — Show this message."
         ),
         inline=False,
@@ -138,6 +196,14 @@ class NotificationCommands(commands.Cog):
         if await _rate_limited(interaction):
             return
         await interaction.response.send_message(embed=build_help_embed(), ephemeral=False)
+
+    @app_commands.command(
+        name="about", description="Learn what this bot is about and find useful links"
+    )
+    async def about(self, interaction: discord.Interaction) -> None:
+        if await _rate_limited(interaction):
+            return
+        await interaction.response.send_message(embed=build_about_embed(), ephemeral=False)
 
     @app_commands.command(name="top", description="Fetch the `n` most recent notifications (1-100)")
     @app_commands.describe(n="How many notifications to fetch")

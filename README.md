@@ -29,6 +29,7 @@ The rest of this document describes how the service works for end users, and bel
 | `/notify list` | Show everything you currently have enabled. |
 | `/notify off <target> [channel]` | Turn off DMs or remove a channel feed. |
 | `/delete` | Erase all your stored data: DM preference, channel feeds you created, and the associated delivery history. |
+| `/about` | Learn what the bot is about and find useful links (website, source code). |
 | `/help` | Show an overview of commands and behaviour. |
 
 ### Telegram
@@ -38,6 +39,7 @@ The rest of this document describes how the service works for end users, and bel
 | `/start` | Subscribe to notifications in this private chat. |
 | `/latest` | Show the newest notification with its full details. |
 | `/top <n>` | Show the `n` most recent notifications, newest first (1–100). |
+| `/about` | Learn what the bot is about and find useful links (website, source code). |
 | `/stop` | Unsubscribe and delete your stored data. |
 | `/help` | Show an overview of commands and behaviour. |
 

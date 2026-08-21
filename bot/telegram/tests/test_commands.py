@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter
 from bot.telegram.bot import commands as telegram_commands
 from bot.telegram.bot.commands import (
+    ABOUT_TEXT,
     HELP_TEXT,
+    handle_about,
     handle_help,
     handle_latest,
     handle_my_chat_member,
@@ -123,7 +125,21 @@ async def test_help_mentions_commands(db):
     assert "/latest" in text
     assert "/top" in text
     assert "/help" in text
+    assert "/about" in text
     assert text == HELP_TEXT
+
+
+async def test_about_mentions_website_source_and_help(db):
+    ctx = make_context()
+    await handle_about(make_update(), ctx)
+    kwargs = ctx.bot.send_message.await_args.kwargs
+    assert kwargs["parse_mode"] == "HTML"
+    assert kwargs["text"] == ABOUT_TEXT
+    assert "voucherbot-preview.pages.dev" in kwargs["text"]
+    assert "github.com/Devathmaj/VoucherBot" in kwargs["text"]
+    assert "/help" in kwargs["text"]
+    # The website link is prominent.
+    assert '<b><a href="https://voucherbot-preview.pages.dev/">' in kwargs["text"]
 
 
 async def test_my_chat_member_add_upserts_group(db):

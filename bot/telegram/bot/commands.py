@@ -58,6 +58,7 @@ HELP_TEXT = (
     "discount, voucher code, certifications, expiry)\n"
     "• /top &lt;n&gt; — show the n most recent notifications, newest first "
     "(1–100)\n"
+    "• /about — learn what this bot is about and find useful links\n"
     "• /stop — unsubscribe and delete your stored data\n"
     "• /help — show this message\n\n"
     "<b>Behaviour</b>\n"
@@ -72,6 +73,33 @@ HELP_TEXT = (
     "voucherbot-preview.pages.dev/#telegram/terms</a>\n"
     "• Disclaimer: <a href=\"https://voucherbot-preview.pages.dev/#telegram/disclaimer\">"
     "voucherbot-preview.pages.dev/#telegram/disclaimer</a>\n"
+)
+
+ABOUT_TEXT = (
+    "<b>VoucherBot Notifications</b>\n\n"
+    "I'm the notification service for <b>VoucherBot</b> — an open-source aggregator "
+    "that continuously monitors vendor sites, training providers, and community "
+    "sources for certification discounts, free exam vouchers, beta exams, and "
+    "training promotions. Automated (AI-assisted) analysis reviews each finding and "
+    "flags likely offers — flagged items are published with their source and dates, "
+    "never as a verification of the offer. This bot delivers every new listing "
+    "straight to you, the moment it is discovered.\n\n"
+    "<b>Website</b>\n"
+    "Browse everything VoucherBot has collected, see how discovery works, and read "
+    "the full notification setup guide:\n"
+    "<b><a href=\"https://voucherbot-preview.pages.dev/\">voucherbot-preview.pages.dev</a></b>\n\n"
+    "<b>What I do here</b>\n"
+    "• Push each new listing to this private chat (after /start) and to any group "
+    "I'm added to.\n"
+    "• Answer on-demand queries: /latest for the newest post, /top &lt;n&gt; for the "
+    "recent ones.\n"
+    "• Deliver each alert exactly once — retries are deduplicated.\n"
+    "• Stay privacy-first: /stop erases your subscription data anytime.\n\n"
+    "<b>Source code</b>\n"
+    "The collection pipeline is open source: "
+    "<a href=\"https://github.com/Devathmaj/VoucherBot\">github.com/Devathmaj/VoucherBot</a>\n\n"
+    "<b>Commands</b>\n"
+    "Use /help to see all available commands and what they do."
 )
 
 
@@ -143,6 +171,11 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 @_rate_limited
+async def handle_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _reply(update, context, ABOUT_TEXT, parse_mode="HTML")
+
+
+@_rate_limited
 async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat = update.effective_chat
     deleted = await delete_telegram_user(chat.id)
@@ -182,6 +215,7 @@ def register_handlers(application) -> None:
     application.add_handler(CommandHandler("stop", handle_stop, filters=ChatType.PRIVATE))
     application.add_handler(CommandHandler("latest", handle_latest))
     application.add_handler(CommandHandler("top", handle_top))
+    application.add_handler(CommandHandler("about", handle_about))
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(
         ChatMemberHandler(
