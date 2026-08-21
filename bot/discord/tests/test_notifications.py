@@ -49,14 +49,27 @@ def test_build_post_embed_card(sample_post):
     embed = build_post_embed(sample_post)
     assert embed.title == "AWS Certification Voucher"
     assert embed.url == "https://example.com/register"
-    assert "**Aws 50% off**" in embed.description
+    # Chips row (vendor · discount) above the title, like the site.
+    assert embed.author.name == "AWS · 50% off"
+    # Summary + source meta line.
     assert "Save 50% off on AWS certification exams." in embed.description
-    assert "Central & Eastern Europe" in embed.description
-    assert "exam voucher" in embed.description
-    field_names = [f.name for f in embed.fields]
-    assert "Code" in field_names
-    assert "ABC123" in str(embed.fields[0].value)
-    assert embed.footer.text == "Aws · Confidence 0.97"
+    assert "example.com · Listed Aug 15, 2026 · via Example Author" in embed.description
+    # Details section with labeled fields.
+    fields = {f.name: f.value for f in embed.fields}
+    assert fields["Type"] == "Exam voucher"
+    assert fields["Regions"] == "Central & Eastern Europe"
+    assert fields["Certifications"] == "AWS Certified Solutions Architect"
+    assert "ABC123" in fields["Code"]
+    # The AI assessment is framed separately, not mixed into the offer.
+    assert fields["Why it was flagged"].startswith("“")
+    assert embed.footer.text == "AI · High confidence · not a verification of the offer"
+
+
+def test_build_post_embed_minimal():
+    embed = build_post_embed({"id": 1, "title": "Only a title"})
+    assert embed.title == "Only a title"
+    assert embed.fields == []
+    assert embed.footer.text == "AI · not a verification of the offer"
 
 
 def _dm_client(user_id: int) -> MagicMock:

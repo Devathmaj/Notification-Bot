@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import discord
 from sqlalchemy import select
@@ -35,17 +37,73 @@ def _join(value: Any) -> str:
     return str(value)
 
 
+_VENDOR_ACRONYMS = {"aws": "AWS", "suse": "SUSE"}
+
+
 def _pretty_vendor(vendor: Any) -> str:
     if not vendor:
         return ""
     try:
-        return str(vendor).strip().title()
+        text = str(vendor).strip()
+        return _VENDOR_ACRONYMS.get(text.lower(), text.title())
     except Exception:
         return str(vendor)
 
 
+def _confidence_tier(confidence: Any) -> str | None:
+    """Map a 0..1 score to the tier label used by the site's AI flag."""
+    try:
+        conf = float(confidence)
+    except (TypeError, ValueError):
+        return None
+    if conf >= 0.8:
+        return "High"
+    if conf >= 0.5:
+        return "Moderate"
+    return "Lower"
+
+
+def _listed_date(post: dict[str, Any]) -> str:
+    for key in ("created_at", "published_at"):
+        raw = post.get(key)
+        if not raw:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        return f"{dt.strftime('%b')} {dt.day}, {dt.year}"
+    return ""
+
+
+def _source_host(post: dict[str, Any], fallback_url: Any) -> str:
+    url = post.get("url") or fallback_url
+    if not url:
+        return ""
+    try:
+        host = urlparse(str(url)).hostname or ""
+    except ValueError:
+        return ""
+    return host
+
+
+def _summary_line(vendor: str, discount: Any) -> str:
+    """One-line summary, mirroring the site's card summary."""
+    if not discount:
+        return ""
+    if vendor:
+        return f"Save {discount} on {vendor} certification exams."
+    return f"Save {discount} on certification exams."
+
+
 def build_post_embed(post: dict[str, Any]) -> discord.Embed:
-    """Render a voucher post as a compact notification card."""
+    """Render a voucher post like the site's opportunity page.
+
+    Layout mirrors the web card/detail view: a chips row (vendor · discount)
+    above the linked title, the summary line, labeled details as fields, the
+    AI assessment framed separately ("why it was flagged"), and a source-host
+    meta line.
+    """
     ai = _coerce_ai(post)
 
     title = post.get("title") or ai.get("promotion_name") or "New notification"
@@ -56,71 +114,58 @@ def build_post_embed(post: dict[str, Any]) -> discord.Embed:
     discount = post.get("discount") or ai.get("discount")
     reason = post.get("reason") or ai.get("reason")
 
-    promotion_type = post.get("promotion_type") or ai.get("promotion_type")
-    if not discount and "voucher" in str(promotion_type or "").lower():
-        discount = "Voucher"
+    # Chips row (site: vendor chip · discount chip) sits above the title.
+    chips_parts = [vendor, discount and str(discount)]
+    chips = " · ".join(p for p in chips_parts if p)
+    if chips:
+        embed.set_author(name=chips)
 
-    # Header line: vendor + discount/type
-    header_parts = [vendor, discount and str(discount)]
-    header = " ".join(p for p in header_parts if p)
-
-    description = ""
-    if header:
-        description += f"**{header}**\n"
-    if reason:
-        description += f"{reason}\n"
-
-    # Compact meta as plain lines (matches the notification-card format).
-    promotion_name = str(post.get("promotion_name") or ai.get("promotion_name") or "").strip()
-    if promotion_name and promotion_name.lower() not in str(title).lower():
-        description += f"\n{promotion_name}"
-
-    regions = _join(ai.get("regions"))
-    if regions:
-        description += f"\n{regions}"
-
-    if promotion_type:
-        description += f"\n{promotion_type}"
-
-    end_date = ai.get("end_date")
-    if end_date:
-        description += f"\n📅 Ends {end_date}"
-
+    # Summary + source meta line.
+    description = _summary_line(vendor, discount)
+    meta_parts = []
+    host = _source_host(post, url)
+    if host:
+        meta_parts.append(host)
+    listed = _listed_date(post)
+    if listed:
+        meta_parts.append(f"Listed {listed}")
     author = post.get("author")
     if author:
-        description += f"\n👤 {author}"
-
+        meta_parts.append(f"via {author}")
+    if meta_parts:
+        description += f"\n\n{' · '.join(meta_parts)}" if description else "\n".join(meta_parts)
     embed.description = description.rstrip() or None
 
-    if url and embed.description:
-        embed.description = f"{embed.description}\n\n[View Details]({url})"
-
-    # Inline details worth keeping.
+    # Details section (site: Vendor / Type / Regions / Promotion / Source).
+    promotion_name = str(post.get("promotion_name") or ai.get("promotion_name") or "").strip()
     fields: list[tuple[str, str, bool]] = []
-    voucher_code = post.get("voucher_code") or ai.get("voucher_code")
-    if voucher_code:
-        fields.append(("Code", f"`{voucher_code}`", True))
+    if promotion_name and promotion_name.lower() not in str(title).lower():
+        fields.append(("Promotion", promotion_name, True))
+    promotion_type = post.get("promotion_type") or ai.get("promotion_type")
+    if promotion_type:
+        fields.append(("Type", str(promotion_type).strip().capitalize(), True))
+    regions = _join(ai.get("regions"))
+    if regions:
+        fields.append(("Regions", regions, True))
     certifications = _join(ai.get("certifications"))
     if certifications:
         fields.append(("Certifications", certifications, False))
-    if fields:
-        for name, value, inline in fields:
-            embed.add_field(name=name, value=value, inline=inline)
+    voucher_code = post.get("voucher_code") or ai.get("voucher_code")
+    if voucher_code:
+        fields.append(("Code", f"`{voucher_code}`", True))
 
-    confidence = ai.get("confidence")
-    footer = None
-    if vendor:
-        footer = vendor
-    if confidence is not None:
-        try:
-            conf = float(confidence)
-        except (ValueError, TypeError):
-            conf = None
-        if conf is not None:
-            badge = f"Confidence {conf:.2f}"
-            footer = f"{footer} · {badge}" if footer else badge
-    if footer:
-        embed.set_footer(text=footer)
+    # AI assessment, kept separate from the offer itself (like the site).
+    if reason:
+        fields.append(("Why it was flagged", f"“{reason}”", False))
+    for name, value, inline in fields:
+        embed.add_field(name=name, value=value, inline=inline)
+
+    tier = _confidence_tier(ai.get("confidence"))
+    footer_parts = ["AI"]
+    if tier:
+        footer_parts.append(f"{tier} confidence")
+    footer_parts.append("not a verification of the offer")
+    embed.set_footer(text=" · ".join(footer_parts))
 
     return embed
 

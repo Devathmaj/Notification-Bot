@@ -19,12 +19,17 @@ def _fake_application():
 
 def test_render_post_message(sample_post):
     text = render_post_message(sample_post)
-    assert "AWS Certification Voucher" in text
-    assert "https://example.com/register" in text
-    assert "Aws 50% off" in text
+    assert '<a href="https://example.com/register">AWS Certification Voucher</a>' in text
+    assert "<b>AWS · 50% off</b>" in text
     assert "Save 50% off on AWS certification exams." in text
+    assert "Type: Exam voucher" in text
+    assert "Regions: Central &amp; Eastern Europe" in text
     assert "ABC123" in text
-    assert "Central &amp; Eastern Europe" in text
+    # The AI assessment is framed separately, not mixed into the offer.
+    assert text.startswith("<b><a href")
+    assert "Why it was flagged:" in text
+    assert "AI · High confidence · not a verification of the offer" in text
+    assert '<a href="https://example.com/register">Open the original source</a>' in text
 
 
 @patch("bot.telegram.bot.notifications.asyncio.sleep", new=AsyncMock())
