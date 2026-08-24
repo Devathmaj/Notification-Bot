@@ -209,12 +209,6 @@ async def _send_channel(
         return None
 
 
-_MENTION_CONTENT = {
-    "here": "@here",
-    "everyone": "@everyone",
-}
-
-
 async def notify_for_post(client: discord.Client, post: dict[str, Any]) -> int:
     """Deliver a post to every DM subscription and every channel feed.
 

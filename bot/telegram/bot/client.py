@@ -2,12 +2,33 @@ from __future__ import annotations
 
 import logging
 
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+)
 from telegram.ext import Application, ApplicationBuilder
 
 from bot.telegram.bot.commands import register_handlers
 from config import settings
 
 logger = logging.getLogger("telegram.bot")
+
+_PRIVATE_COMMANDS = [
+    BotCommand("start", "Subscribe to notifications in this chat"),
+    BotCommand("latest", "Show the newest voucher alert"),
+    BotCommand("top", "Show recent alerts, e.g. /top 5"),
+    BotCommand("about", "Learn what this bot is about"),
+    BotCommand("help", "How to use this bot"),
+    BotCommand("stop", "Unsubscribe and delete your data"),
+]
+
+_GROUP_COMMANDS = [
+    BotCommand("latest", "Show the newest voucher alert"),
+    BotCommand("top", "Show recent alerts, e.g. /top 5"),
+    BotCommand("about", "Learn what this bot is about"),
+    BotCommand("help", "How to use this bot"),
+]
 
 
 def build_application(
@@ -43,6 +64,18 @@ async def start_application(application: Application) -> None:
         kwargs["secret_token"] = settings.telegram_webhook_secret
     await application.bot.set_webhook(**kwargs)
     logger.info("Telegram webhook registered at %s", settings.telegram_webhook_url)
+
+    # Surface the command menu in Telegram's UI. /start and /stop are private
+    # chats only (handler filters), so they are not advertised in groups.
+    try:
+        await application.bot.set_my_commands(
+            _PRIVATE_COMMANDS, scope=BotCommandScopeAllPrivateChats()
+        )
+        await application.bot.set_my_commands(
+            _GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats()
+        )
+    except Exception:
+        logger.warning("Could not register the Telegram command menu", exc_info=True)
 
 
 async def stop_application(application: Application) -> None:

@@ -133,7 +133,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         text=(
             f"Hi {first}! You are now subscribed to notifications here.\n\n"
             "Use /latest for the newest post, /top <n> for recent ones, "
-            "and /help for more information."
+            "/about to learn what this bot is about, and /help for more information."
         ),
     )
 
