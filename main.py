@@ -22,13 +22,22 @@ logger = logging.getLogger("main")
 
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
 
-# Capped exponential backoff for Discord startup (e.g. a temporary 429 IP
-# block clears within minutes). Bounded total wait (~25 min) — never an
-# indefinite retry loop. Only the lightweight auth probe is retried;
-# bot.start() itself runs exactly once per process.
-_DISCORD_START_DELAYS = (30, 60, 120, 240, 480, 600)
-_MAX_DISCORD_START_DELAY = 600
+# Discord startup retry policy. When a probe gets 429'd, Discord's own
+# Retry-After is authoritative and is followed as-is (+ small buffer, sanity-
+# clamped). Without a hint we fall back to a capped exponential schedule.
+# Everything stays bounded: max attempts AND a total wait budget (~65 min,
+# sized so any single server hint up to 1h fits), so a retry can never delay
+# startup indefinitely. bot.start() itself runs exactly once per process;
+# only the lightweight auth probe retries.
+_DISCORD_FALLBACK_DELAYS = (30, 60, 120, 240, 480, 600)
+_DISCORD_MAX_FALLBACK_DELAY = 600
+_DISCORD_MAX_HINT_SECONDS = 3600
+_DISCORD_RETRY_BUFFER_SECONDS = 5
+_DISCORD_MAX_ATTEMPTS = 6
+_DISCORD_MAX_TOTAL_WAIT = 3900
 _DISCORD_API_URL = "https://discord.com/api/v10"
+
+_sleep = asyncio.sleep  # indirect so tests can observe waits
 
 
 async def _probe_discord_auth(token: str) -> tuple[int | None, int | None]:
@@ -59,36 +68,61 @@ async def _probe_discord_auth(token: str) -> tuple[int | None, int | None]:
 
 
 async def _start_discord_when_ready(bot: discord.Client) -> None:
-    """Wait for Discord auth to succeed (capped backoff), then start once.
+    """Wait for Discord auth to succeed, then start the bot once.
 
-    bot.start() must run exactly once per process: it triggers setup_hook,
-    which registers cogs and syncs commands. Retrying it wholesale would
-    double-register them, so all retrying happens at the cheap probe level.
+    Retry timing follows Discord's own Retry-After when provided (plus a
+    small buffer); otherwise falls back to capped exponential backoff.
+    Bounded by _DISCORD_MAX_ATTEMPTS and _DISCORD_MAX_TOTAL_WAIT so startup
+    can never be delayed indefinitely. bot.start() must run exactly once per
+    process: it triggers setup_hook, which registers cogs and syncs commands.
     """
     token = settings.discord_token
-    for attempt, delay in enumerate(_DISCORD_START_DELAYS, start=1):
-        status, retry_after = await _probe_discord_auth(token)
+    waited = 0
+    for attempt in range(1, _DISCORD_MAX_ATTEMPTS + 1):
+        status, hint = await _probe_discord_auth(token)
         if status == 200:
             await bot.start(token)
             return
         if status == 401:
             logger.error("Discord rejected the bot token; Discord stays down until restart")
             return
+
         reason = f"HTTP {status}" if status is not None else "network error"
-        hint = f" (server says retry after {retry_after}s)" if retry_after else ""
+        if attempt == _DISCORD_MAX_ATTEMPTS:
+            break
+
+        if hint is not None:
+            wait = min(max(hint, 1) + _DISCORD_RETRY_BUFFER_SECONDS, _DISCORD_MAX_HINT_SECONDS)
+            basis = f"following Discord's retry-after ({wait}s)"
+        else:
+            fallback = _DISCORD_FALLBACK_DELAYS[min(attempt, len(_DISCORD_FALLBACK_DELAYS)) - 1]
+            wait = min(fallback, _DISCORD_MAX_FALLBACK_DELAY)
+            basis = f"no retry hint — backing off ({wait}s)"
+
+        if waited + wait > _DISCORD_MAX_TOTAL_WAIT:
+            logger.critical(
+                "Discord still unavailable after %d attempts (waited %ds); next wait would "
+                "exceed the %ds startup budget. Discord stays down until restart.",
+                attempt,
+                waited,
+                _DISCORD_MAX_TOTAL_WAIT,
+            )
+            return
+
         logger.warning(
-            "Discord API not ready (attempt %d/%d): %s%s — retrying in %ds",
+            "Discord API not ready (attempt %d/%d): %s — %s",
             attempt,
-            len(_DISCORD_START_DELAYS),
+            _DISCORD_MAX_ATTEMPTS,
             reason,
-            hint,
-            delay,
+            basis,
         )
-        await asyncio.sleep(min(delay, _MAX_DISCORD_START_DELAY))
+        await _sleep(wait)
+        waited += wait
     logger.critical(
-        "Discord bot gave up after %d startup attempts; Discord stays down "
+        "Discord bot gave up after %d attempts (waited %ds total); Discord stays down "
         "until the process is restarted.",
-        len(_DISCORD_START_DELAYS),
+        _DISCORD_MAX_ATTEMPTS,
+        waited,
     )
 
 
