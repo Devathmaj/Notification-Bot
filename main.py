@@ -31,8 +31,12 @@ _MAX_DISCORD_START_DELAY = 600
 _DISCORD_API_URL = "https://discord.com/api/v10"
 
 
-async def _probe_discord_auth(token: str) -> int | None:
-    """Single Discord auth probe. Returns the HTTP status, None on network error."""
+async def _probe_discord_auth(token: str) -> tuple[int | None, int | None]:
+    """Single Discord auth probe.
+
+    Returns (HTTP status, server-provided Retry-After in seconds if sent).
+    Status is None on network errors.
+    """
     import aiohttp
 
     try:
@@ -42,9 +46,16 @@ async def _probe_discord_auth(token: str) -> int | None:
                 headers={"Authorization": f"Bot {token}"},
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as resp:
-                return resp.status
+                retry_after: int | None = None
+                raw = resp.headers.get("Retry-After")
+                if raw:
+                    try:
+                        retry_after = max(0, int(float(raw)))
+                    except ValueError:
+                        retry_after = None
+                return resp.status, retry_after
     except (aiohttp.ClientError, OSError, TimeoutError):
-        return None
+        return None, None
 
 
 async def _start_discord_when_ready(bot: discord.Client) -> None:
@@ -56,7 +67,7 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
     """
     token = settings.discord_token
     for attempt, delay in enumerate(_DISCORD_START_DELAYS, start=1):
-        status = await _probe_discord_auth(token)
+        status, retry_after = await _probe_discord_auth(token)
         if status == 200:
             await bot.start(token)
             return
@@ -64,11 +75,13 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
             logger.error("Discord rejected the bot token; Discord stays down until restart")
             return
         reason = f"HTTP {status}" if status is not None else "network error"
+        hint = f" (server says retry after {retry_after}s)" if retry_after else ""
         logger.warning(
-            "Discord API not ready (attempt %d/%d): %s — retrying in %ds",
+            "Discord API not ready (attempt %d/%d): %s%s — retrying in %ds",
             attempt,
             len(_DISCORD_START_DELAYS),
             reason,
+            hint,
             delay,
         )
         await asyncio.sleep(min(delay, _MAX_DISCORD_START_DELAY))

@@ -13,7 +13,7 @@ def _bot() -> MagicMock:
 
 async def test_starts_once_when_probe_succeeds(monkeypatch):
     monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0,))
-    probe = AsyncMock(return_value=200)
+    probe = AsyncMock(return_value=(200, None))
     monkeypatch.setattr(main, "_probe_discord_auth", probe)
     bot = _bot()
 
@@ -25,7 +25,7 @@ async def test_starts_once_when_probe_succeeds(monkeypatch):
 
 async def test_probes_until_ready_then_starts(monkeypatch):
     monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0, 0))
-    probe = AsyncMock(side_effect=[429, 429, 200])
+    probe = AsyncMock(side_effect=[(429, 3600), (429, 1800), (200, None)])
     monkeypatch.setattr(main, "_probe_discord_auth", probe)
     bot = _bot()
 
@@ -37,7 +37,7 @@ async def test_probes_until_ready_then_starts(monkeypatch):
 
 async def test_gives_up_after_bounded_attempts(monkeypatch):
     monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0))
-    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=429))
+    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=(429, 600)))
     bot = _bot()
 
     # Bounded: returns instead of probing forever or raising.
@@ -48,7 +48,7 @@ async def test_gives_up_after_bounded_attempts(monkeypatch):
 
 async def test_bad_token_fails_fast_without_retries(monkeypatch):
     monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0))
-    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=401))
+    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=(401, None)))
     bot = _bot()
 
     await main._start_discord_when_ready(bot)
