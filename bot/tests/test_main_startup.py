@@ -2,44 +2,55 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import discord
-
 import main
 
 
-def _rate_limited() -> discord.HTTPException:
-    return discord.HTTPException(MagicMock(status=429), {"message": "blocked"})
-
-
-def _bot(side_effects) -> MagicMock:
+def _bot() -> MagicMock:
     bot = MagicMock()
-    bot.start = AsyncMock(side_effect=side_effects)
-    bot.is_closed.return_value = True
+    bot.start = AsyncMock()
     return bot
 
 
-async def test_start_retries_transient_failure_then_succeeds(monkeypatch):
-    monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0))
-    bot = _bot([_rate_limited(), None])
+async def test_starts_once_when_probe_succeeds(monkeypatch):
+    monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0,))
+    probe = AsyncMock(return_value=200)
+    monkeypatch.setattr(main, "_probe_discord_auth", probe)
+    bot = _bot()
 
-    await main._start_discord_with_retries(bot)
+    await main._start_discord_when_ready(bot)
 
-    assert bot.start.await_count == 2
+    assert bot.start.await_count == 1  # bootstrap runs exactly once
+    assert probe.await_count == 1
 
 
-async def test_start_gives_up_after_bounded_attempts(monkeypatch):
+async def test_probes_until_ready_then_starts(monkeypatch):
     monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0, 0))
-    bot = _bot(_rate_limited())
+    probe = AsyncMock(side_effect=[429, 429, 200])
+    monkeypatch.setattr(main, "_probe_discord_auth", probe)
+    bot = _bot()
 
-    # Bounded: returns instead of retrying forever or raising.
-    await main._start_discord_with_retries(bot)
+    await main._start_discord_when_ready(bot)
 
-    assert bot.start.await_count == len(main._DISCORD_START_DELAYS)
-
-
-async def test_bad_token_fails_fast_without_retries():
-    bot = _bot(discord.LoginFailure("401"))
-
-    await main._start_discord_with_retries(bot)
-
+    assert probe.await_count == 3
     assert bot.start.await_count == 1
+
+
+async def test_gives_up_after_bounded_attempts(monkeypatch):
+    monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0))
+    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=429))
+    bot = _bot()
+
+    # Bounded: returns instead of probing forever or raising.
+    await main._start_discord_when_ready(bot)
+
+    assert bot.start.await_count == 0
+
+
+async def test_bad_token_fails_fast_without_retries(monkeypatch):
+    monkeypatch.setattr(main, "_DISCORD_START_DELAYS", (0, 0))
+    monkeypatch.setattr(main, "_probe_discord_auth", AsyncMock(return_value=401))
+    bot = _bot()
+
+    await main._start_discord_when_ready(bot)
+
+    assert bot.start.await_count == 0

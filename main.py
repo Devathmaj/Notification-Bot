@@ -24,44 +24,54 @@ _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
 
 # Capped exponential backoff for Discord startup (e.g. a temporary 429 IP
 # block clears within minutes). Bounded total wait (~25 min) — never an
-# indefinite retry loop.
+# indefinite retry loop. Only the lightweight auth probe is retried;
+# bot.start() itself runs exactly once per process.
 _DISCORD_START_DELAYS = (30, 60, 120, 240, 480, 600)
 _MAX_DISCORD_START_DELAY = 600
+_DISCORD_API_URL = "https://discord.com/api/v10"
 
 
-async def _start_discord_with_retries(bot: discord.Client) -> None:
-    """Start the Discord bot, retrying transient startup failures.
+async def _probe_discord_auth(token: str) -> int | None:
+    """Single Discord auth probe. Returns the HTTP status, None on network error."""
+    import aiohttp
 
-    Transient errors (rate limits, network, dropped connections) are retried
-    with the capped schedule above; a rejected token is permanent and fails
-    immediately. After the final attempt the task gives up until the process
-    is restarted — other modules keep running either way.
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{_DISCORD_API_URL}/users/@me",
+                headers={"Authorization": f"Bot {token}"},
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                return resp.status
+    except (aiohttp.ClientError, OSError, TimeoutError):
+        return None
+
+
+async def _start_discord_when_ready(bot: discord.Client) -> None:
+    """Wait for Discord auth to succeed (capped backoff), then start once.
+
+    bot.start() must run exactly once per process: it triggers setup_hook,
+    which registers cogs and syncs commands. Retrying it wholesale would
+    double-register them, so all retrying happens at the cheap probe level.
     """
+    token = settings.discord_token
     for attempt, delay in enumerate(_DISCORD_START_DELAYS, start=1):
-        try:
-            await bot.start(settings.discord_token)
+        status = await _probe_discord_auth(token)
+        if status == 200:
+            await bot.start(token)
             return
-        except asyncio.CancelledError:
-            raise
-        except discord.LoginFailure:
-            logger.error("Discord rejected the bot token; not retrying")
+        if status == 401:
+            logger.error("Discord rejected the bot token; Discord stays down until restart")
             return
-        except (discord.HTTPException, discord.ConnectionClosed, OSError, TimeoutError) as exc:
-            retry_hint = getattr(exc, "retry_after", None)
-            logger.warning(
-                "Discord startup failed (attempt %d/%d)%s — retrying in %ds",
-                attempt,
-                len(_DISCORD_START_DELAYS),
-                f" (server hint: retry after {int(retry_hint)}s)" if retry_hint else "",
-                delay,
-                exc_info=True,
-            )
-            if not bot.is_closed():
-                try:
-                    await bot.close()
-                except Exception:
-                    logger.debug("Cleanup after failed Discord start raised", exc_info=True)
-            await asyncio.sleep(min(delay, _MAX_DISCORD_START_DELAY))
+        reason = f"HTTP {status}" if status is not None else "network error"
+        logger.warning(
+            "Discord API not ready (attempt %d/%d): %s — retrying in %ds",
+            attempt,
+            len(_DISCORD_START_DELAYS),
+            reason,
+            delay,
+        )
+        await asyncio.sleep(min(delay, _MAX_DISCORD_START_DELAY))
     logger.critical(
         "Discord bot gave up after %d startup attempts; Discord stays down "
         "until the process is restarted.",
@@ -129,7 +139,7 @@ async def run() -> None:
     ]
     if settings.has_discord_token:
         tasks.append(
-            asyncio.create_task(_guarded("discord bot", _start_discord_with_retries(bot)))
+            asyncio.create_task(_guarded("discord bot", _start_discord_when_ready(bot)))
         )
     if telegram_application is not None:
         tasks.append(
