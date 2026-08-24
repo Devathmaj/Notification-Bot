@@ -23,18 +23,16 @@ logger = logging.getLogger("main")
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
 
 # Discord startup retry policy. When a probe gets 429'd, Discord's own
-# Retry-After is authoritative and is followed as-is (+ small buffer, sanity-
-# clamped). Without a hint we fall back to a capped exponential schedule.
-# Everything stays bounded: max attempts AND a total wait budget (~65 min,
-# sized so any single server hint up to 1h fits), so a retry can never delay
-# startup indefinitely. bot.start() itself runs exactly once per process;
-# only the lightweight auth probe retries.
+# Retry-After is authoritative: we follow it (+ small buffer, sanity-clamped)
+# for as long as it takes — the probe runs as a background task, so nothing
+# else is delayed and each retry is one tiny request timed by Discord itself.
+# Without a hint we fall back to a capped exponential schedule. The only
+# permanent failure is a rejected token (401), which stops immediately.
+# bot.start() itself runs exactly once per process; only the probe retries.
 _DISCORD_FALLBACK_DELAYS = (30, 60, 120, 240, 480, 600)
 _DISCORD_MAX_FALLBACK_DELAY = 600
 _DISCORD_MAX_HINT_SECONDS = 3600
 _DISCORD_RETRY_BUFFER_SECONDS = 5
-_DISCORD_MAX_ATTEMPTS = 6
-_DISCORD_MAX_TOTAL_WAIT = 3900
 _DISCORD_API_URL = "https://discord.com/api/v10"
 
 _sleep = asyncio.sleep  # indirect so tests can observe waits
@@ -71,14 +69,16 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
     """Wait for Discord auth to succeed, then start the bot once.
 
     Retry timing follows Discord's own Retry-After when provided (plus a
-    small buffer); otherwise falls back to capped exponential backoff.
-    Bounded by _DISCORD_MAX_ATTEMPTS and _DISCORD_MAX_TOTAL_WAIT so startup
-    can never be delayed indefinitely. bot.start() must run exactly once per
-    process: it triggers setup_hook, which registers cogs and syncs commands.
+    small buffer) for as long as it takes; without a hint it falls back to
+    capped exponential backoff. Only a rejected token (401) stops retrying,
+    since no amount of waiting fixes an invalid token. bot.start() must run
+    exactly once per process: it triggers setup_hook, which registers cogs
+    and syncs commands.
     """
     token = settings.discord_token
-    waited = 0
-    for attempt in range(1, _DISCORD_MAX_ATTEMPTS + 1):
+    attempt = 0
+    while True:
+        attempt += 1
         status, hint = await _probe_discord_auth(token)
         if status == 200:
             await bot.start(token)
@@ -88,9 +88,6 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
             return
 
         reason = f"HTTP {status}" if status is not None else "network error"
-        if attempt == _DISCORD_MAX_ATTEMPTS:
-            break
-
         if hint is not None:
             wait = min(max(hint, 1) + _DISCORD_RETRY_BUFFER_SECONDS, _DISCORD_MAX_HINT_SECONDS)
             basis = f"following Discord's retry-after ({wait}s)"
@@ -99,31 +96,13 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
             wait = min(fallback, _DISCORD_MAX_FALLBACK_DELAY)
             basis = f"no retry hint — backing off ({wait}s)"
 
-        if waited + wait > _DISCORD_MAX_TOTAL_WAIT:
-            logger.critical(
-                "Discord still unavailable after %d attempts (waited %ds); next wait would "
-                "exceed the %ds startup budget. Discord stays down until restart.",
-                attempt,
-                waited,
-                _DISCORD_MAX_TOTAL_WAIT,
-            )
-            return
-
         logger.warning(
-            "Discord API not ready (attempt %d/%d): %s — %s",
+            "Discord API not ready (attempt %d): %s — %s",
             attempt,
-            _DISCORD_MAX_ATTEMPTS,
             reason,
             basis,
         )
         await _sleep(wait)
-        waited += wait
-    logger.critical(
-        "Discord bot gave up after %d attempts (waited %ds total); Discord stays down "
-        "until the process is restarted.",
-        _DISCORD_MAX_ATTEMPTS,
-        waited,
-    )
 
 
 async def _retention_sweep() -> None:
