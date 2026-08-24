@@ -10,7 +10,7 @@ from bot.discord.bot.commands import NotificationCommands
 
 logger = logging.getLogger("discord.bot")
 
-_BOT_STATUS = "/about | /help | https://voucherbot-preview.pages.dev/"
+_BOT_STATUS = "/about | /help"
 
 _ERROR_NOTICE = (
     "Something went wrong while running that command. Please try again in a moment."

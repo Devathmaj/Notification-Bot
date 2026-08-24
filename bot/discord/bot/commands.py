@@ -57,14 +57,14 @@ def build_about_embed() -> discord.Embed:
         "and flags likely offers — flagged items are published with their source and "
         "dates, never as a verification of the offer. This bot delivers every new "
         "listing straight to you, the moment it is discovered.\n\n"
-        f"Everything collected so far: **[{_WEBSITE_URL}]({_WEBSITE_URL})**"
+        f"Everything collected so far: {_WEBSITE_URL}"
     )
 
     embed.add_field(
         name="Website",
         value=(
             f"Browse everything VoucherBot has collected, see how discovery works, "
-            f"and read the full notification setup guide at **[{_WEBSITE_URL}]({_WEBSITE_URL})**."
+            f"and read the full notification setup guide at {_WEBSITE_URL}."
         ),
         inline=False,
     )
@@ -82,9 +82,7 @@ def build_about_embed() -> discord.Embed:
     )
     embed.add_field(
         name="Source code",
-        value=(
-            f"The collection pipeline is open source: [{_SOURCE_URL}]({_SOURCE_URL})."
-        ),
+        value=f"The collection pipeline is open source: {_SOURCE_URL}.",
         inline=False,
     )
     embed.add_field(
