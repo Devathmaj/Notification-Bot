@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from bot.discord.tests.conftest import SAMPLE_EVENT, sample_event
-from webhook.handlers import InvalidEvent, validate_event
+from webhook.handlers import InvalidEvent, handle_event, validate_event
 
 
 def test_validate_event_ok():
@@ -16,6 +18,21 @@ def test_validate_event_ok():
     assert post["discount"] == "100%"
     assert post["ai_result"]["confidence"] == 0.8
     assert post["ai_result"]["certifications"] == ["AWS-Developer"]
+
+
+async def test_handle_event_isolates_platform_failures(monkeypatch):
+    from webhook import handlers
+
+    monkeypatch.setattr(
+        handlers, "notify_discord", AsyncMock(side_effect=RuntimeError("discord down"))
+    )
+    telegram_ok = AsyncMock(return_value=2)
+    monkeypatch.setattr(handlers, "notify_telegram", telegram_ok)
+
+    sent = await handle_event(sample_event(), client=MagicMock(), telegram_application=MagicMock())
+
+    assert sent == 2  # Telegram unaffected by the Discord failure
+    telegram_ok.assert_awaited_once()
 
 
 def test_validate_event_rejects_wrong_event():

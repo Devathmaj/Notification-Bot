@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import discord
 
 from bot.discord.bot.notifications import notify_for_post as notify_discord
 from bot.telegram.bot.notifications import notify_for_post as notify_telegram
+
+logger = logging.getLogger("webhook.handlers")
 
 EXPECTED_EVENT = "voucher_alert"
 
@@ -59,12 +62,20 @@ async def handle_event(
     """Process a voucher alert. Returns the number of notifications delivered.
 
     Delivers to whichever platforms have a client wired in. Per-recipient dedup
-    lives in the platform notifiers, so webhook retries never double-send.
+    lives in the platform notifiers, so webhook retries never double-send. A
+    failure on one platform is logged and never fails the event or the other
+    platform.
     """
     post = validate_event(payload)
     total = 0
     if client is not None:
-        total += await notify_discord(client, post)
+        try:
+            total += await notify_discord(client, post)
+        except Exception:
+            logger.exception("Discord delivery failed for post %s", post.get("id"))
     if telegram_application is not None:
-        total += await notify_telegram(telegram_application, post)
+        try:
+            total += await notify_telegram(telegram_application, post)
+        except Exception:
+            logger.exception("Telegram delivery failed for post %s", post.get("id"))
     return total

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import discord
 import uvicorn
 
 from bot.discord.database.connection import ensure_schema
@@ -20,6 +21,52 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
+
+# Capped exponential backoff for Discord startup (e.g. a temporary 429 IP
+# block clears within minutes). Bounded total wait (~25 min) — never an
+# indefinite retry loop.
+_DISCORD_START_DELAYS = (30, 60, 120, 240, 480, 600)
+_MAX_DISCORD_START_DELAY = 600
+
+
+async def _start_discord_with_retries(bot: discord.Client) -> None:
+    """Start the Discord bot, retrying transient startup failures.
+
+    Transient errors (rate limits, network, dropped connections) are retried
+    with the capped schedule above; a rejected token is permanent and fails
+    immediately. After the final attempt the task gives up until the process
+    is restarted — other modules keep running either way.
+    """
+    for attempt, delay in enumerate(_DISCORD_START_DELAYS, start=1):
+        try:
+            await bot.start(settings.discord_token)
+            return
+        except asyncio.CancelledError:
+            raise
+        except discord.LoginFailure:
+            logger.error("Discord rejected the bot token; not retrying")
+            return
+        except (discord.HTTPException, discord.ConnectionClosed, OSError, TimeoutError) as exc:
+            retry_hint = getattr(exc, "retry_after", None)
+            logger.warning(
+                "Discord startup failed (attempt %d/%d)%s — retrying in %ds",
+                attempt,
+                len(_DISCORD_START_DELAYS),
+                f" (server hint: retry after {int(retry_hint)}s)" if retry_hint else "",
+                delay,
+                exc_info=True,
+            )
+            if not bot.is_closed():
+                try:
+                    await bot.close()
+                except Exception:
+                    logger.debug("Cleanup after failed Discord start raised", exc_info=True)
+            await asyncio.sleep(min(delay, _MAX_DISCORD_START_DELAY))
+    logger.critical(
+        "Discord bot gave up after %d startup attempts; Discord stays down "
+        "until the process is restarted.",
+        len(_DISCORD_START_DELAYS),
+    )
 
 
 async def _retention_sweep() -> None:
@@ -82,7 +129,7 @@ async def run() -> None:
     ]
     if settings.has_discord_token:
         tasks.append(
-            asyncio.create_task(_guarded("discord bot", bot.start(settings.discord_token)))
+            asyncio.create_task(_guarded("discord bot", _start_discord_with_retries(bot)))
         )
     if telegram_application is not None:
         tasks.append(
