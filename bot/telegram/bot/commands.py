@@ -67,12 +67,12 @@ HELP_TEXT = (
     "• Commands work in private chats and groups.\n"
     "• Unsubscribing does not delete earlier messages you received.\n\n"
     "<b>Links</b>\n"
-    "• Privacy policy: <a href=\"https://voucherbot-preview.pages.dev/#telegram/privacy\">"
-    "voucherbot-preview.pages.dev/#telegram/privacy</a>\n"
-    "• Terms of service: <a href=\"https://voucherbot-preview.pages.dev/#telegram/terms\">"
-    "voucherbot-preview.pages.dev/#telegram/terms</a>\n"
-    "• Disclaimer: <a href=\"https://voucherbot-preview.pages.dev/#telegram/disclaimer\">"
-    "voucherbot-preview.pages.dev/#telegram/disclaimer</a>\n"
+    "• Privacy policy: <a href=\"https://voucherbot.pages.dev/#telegram/privacy\">"
+    "voucherbot.pages.dev/#telegram/privacy</a>\n"
+    "• Terms of service: <a href=\"https://voucherbot.pages.dev/#telegram/terms\">"
+    "voucherbot.pages.dev/#telegram/terms</a>\n"
+    "• Disclaimer: <a href=\"https://voucherbot.pages.dev/#telegram/disclaimer\">"
+    "voucherbot.pages.dev/#telegram/disclaimer</a>\n"
 )
 
 ABOUT_TEXT = (
@@ -87,7 +87,7 @@ ABOUT_TEXT = (
     "<b>Website</b>\n"
     "Browse everything VoucherBot has collected, see how discovery works, and read "
     "the full notification setup guide:\n"
-    "<b><a href=\"https://voucherbot-preview.pages.dev/\">voucherbot-preview.pages.dev</a></b>\n\n"
+    "<b><a href=\"https://voucherbot.pages.dev/\">voucherbot.pages.dev</a></b>\n\n"
     "<b>What I do here</b>\n"
     "• Push each new listing to this private chat (after /start) and to any group "
     "I'm added to.\n"

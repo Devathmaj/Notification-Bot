@@ -4,7 +4,7 @@ The notification service for [VoucherBot](https://github.com/Devathmaj/VoucherBo
 
 ## Get started
 
-**Just visit https://voucherbot-preview.pages.dev/#notifications** — it has everything you need: how to get alerts set up, the bot invite links, permissions, and all the details for using the service on Discord and Telegram.
+**Just visit https://voucherbot.pages.dev/#notifications** — it has everything you need: how to get alerts set up, the bot invite links, permissions, and all the details for using the service on Discord and Telegram.
 
 The rest of this document describes how the service works for end users, and below that is the **self-hosting** guide for running the project yourself.
 

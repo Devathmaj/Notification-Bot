@@ -30,15 +30,15 @@ MAX_TOP = 100
 
 _HELP_COLOR = 0x2ECC71
 
-_WEBSITE_URL = "https://voucherbot-preview.pages.dev/"
+_WEBSITE_URL = "https://voucherbot.pages.dev/"
 
 _SOURCE_URL = "https://github.com/Devathmaj/VoucherBot"
 
 _HELP_URLS = {
-    "privacy": "https://voucherbot-preview.pages.dev/#discord/privacy",
-    "terms": "https://voucherbot-preview.pages.dev/#discord/terms",
-    "disclaimer": "https://voucherbot-preview.pages.dev/#discord/disclaimer",
-    "permissions": "https://voucherbot-preview.pages.dev/#discord/permissions",
+    "privacy": "https://voucherbot.pages.dev/#discord/privacy",
+    "terms": "https://voucherbot.pages.dev/#discord/terms",
+    "disclaimer": "https://voucherbot.pages.dev/#discord/disclaimer",
+    "permissions": "https://voucherbot.pages.dev/#discord/permissions",
 }
 
 

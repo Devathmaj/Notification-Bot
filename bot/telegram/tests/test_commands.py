@@ -135,11 +135,11 @@ async def test_about_mentions_website_source_and_help(db):
     kwargs = ctx.bot.send_message.await_args.kwargs
     assert kwargs["parse_mode"] == "HTML"
     assert kwargs["text"] == ABOUT_TEXT
-    assert "voucherbot-preview.pages.dev" in kwargs["text"]
+    assert "voucherbot.pages.dev" in kwargs["text"]
     assert "github.com/Devathmaj/VoucherBot" in kwargs["text"]
     assert "/help" in kwargs["text"]
     # The website link is prominent.
-    assert '<b><a href="https://voucherbot-preview.pages.dev/">' in kwargs["text"]
+    assert '<b><a href="https://voucherbot.pages.dev/">' in kwargs["text"]
 
 
 async def test_my_chat_member_add_upserts_group(db):
