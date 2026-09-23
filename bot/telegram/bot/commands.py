@@ -4,8 +4,13 @@ import asyncio
 import logging
 from functools import wraps
 
-from telegram import Update
-from telegram.ext import ChatMemberHandler, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    CallbackQueryHandler,
+    ChatMemberHandler,
+    CommandHandler,
+    ContextTypes,
+)
 from telegram.ext.filters import ChatType
 
 from bot.discord.database.posts import fetch_latest_posts
@@ -26,6 +31,19 @@ MAX_TOP = 100
 _PACE_SECONDS = 0.35
 
 telegram_limiter = WindowRateLimiter(*parse_rate(settings.telegram_command_rate))
+
+MAIN_KEYBOARD = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton("/latest", callback_data="latest"),
+            InlineKeyboardButton("/help", callback_data="help"),
+        ],
+        [
+            InlineKeyboardButton("/about", callback_data="about"),
+            InlineKeyboardButton("/donate", callback_data="donate"),
+        ],
+    ]
+)
 
 
 def _log_command(update: Update, command_name: str) -> None:
@@ -150,6 +168,50 @@ async def _send_paced(update: Update, context: ContextTypes.DEFAULT_TYPE, text: 
     await asyncio.sleep(_PACE_SECONDS)
 
 
+async def _send_with_keyboard(
+    chat_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    parse_mode: str | None = "HTML",
+) -> None:
+    """Send a message with the main inline keyboard attached."""
+    await context.bot.send_message(
+        chat_id=chat_id, text=text, parse_mode=parse_mode, reply_markup=MAIN_KEYBOARD
+    )
+
+
+async def _do_latest(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Core logic for /latest command and callback."""
+    posts = await fetch_latest_posts(limit=1)
+    if not posts:
+        await context.bot.send_message(chat_id=chat_id, text="No notifications yet.")
+        return
+    await context.bot.send_message(
+        chat_id=chat_id, text=render_post_message(posts[0]), parse_mode="HTML", reply_markup=MAIN_KEYBOARD
+    )
+
+
+async def _do_help(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Core logic for /help command and callback."""
+    await context.bot.send_message(
+        chat_id=chat_id, text=HELP_TEXT, parse_mode="HTML", reply_markup=MAIN_KEYBOARD
+    )
+
+
+async def _do_about(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Core logic for /about command and callback."""
+    await context.bot.send_message(
+        chat_id=chat_id, text=ABOUT_TEXT, parse_mode="HTML", reply_markup=MAIN_KEYBOARD
+    )
+
+
+async def _do_donate(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Core logic for /donate command and callback."""
+    await context.bot.send_message(
+        chat_id=chat_id, text=DONATE_TEXT, parse_mode="HTML", reply_markup=MAIN_KEYBOARD
+    )
+
+
 @_rate_limited
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "start")
@@ -171,17 +233,14 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "Use /latest for the newest post, /top <n> for recent ones, "
             "/about to learn what this bot is about, and /help for more information."
         ),
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
 @_rate_limited
 async def handle_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "latest")
-    posts = await fetch_latest_posts(limit=1)
-    if not posts:
-        await _reply(update, context, "No notifications yet.")
-        return
-    await _reply(update, context, render_post_message(posts[0]), parse_mode="HTML")
+    await _do_latest(update.effective_chat.id, context)
 
 
 @_rate_limited
@@ -206,19 +265,19 @@ async def handle_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 @_rate_limited
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "help")
-    await _reply(update, context, HELP_TEXT, parse_mode="HTML")
+    await _do_help(update.effective_chat.id, context)
 
 
 @_rate_limited
 async def handle_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "about")
-    await _reply(update, context, ABOUT_TEXT, parse_mode="HTML")
+    await _do_about(update.effective_chat.id, context)
 
 
 @_rate_limited
 async def handle_donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "donate")
-    await _reply(update, context, DONATE_TEXT, parse_mode="HTML")
+    await _do_donate(update.effective_chat.id, context)
 
 
 @_rate_limited
@@ -259,6 +318,38 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
         logger.info("Bot removed from chat %s", redact_chat_id(chat.id))
 
 
+async def _handle_callback(query, context: ContextTypes.DEFAULT_TYPE, action: str) -> None:
+    """Route callback query to the appropriate handler."""
+    chat_id = query.message.chat.id
+    user_id = query.from_user.id
+    logger.info("Callback %s invoked by user %s in chat %s", action, user_id, redact_chat_id(chat_id))
+    await query.answer()
+    if action == "latest":
+        await _do_latest(chat_id, context)
+    elif action == "help":
+        await _do_help(chat_id, context)
+    elif action == "about":
+        await _do_about(chat_id, context)
+    elif action == "donate":
+        await _do_donate(chat_id, context)
+
+
+async def handle_callback_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_callback(update.callback_query, context, "latest")
+
+
+async def handle_callback_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_callback(update.callback_query, context, "help")
+
+
+async def handle_callback_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_callback(update.callback_query, context, "about")
+
+
+async def handle_callback_donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _handle_callback(update.callback_query, context, "donate")
+
+
 def register_handlers(application) -> None:
     application.add_handler(CommandHandler("start", handle_start, filters=ChatType.PRIVATE))
     application.add_handler(CommandHandler("stop", handle_stop, filters=ChatType.PRIVATE))
@@ -267,6 +358,10 @@ def register_handlers(application) -> None:
     application.add_handler(CommandHandler("about", handle_about))
     application.add_handler(CommandHandler("donate", handle_donate))
     application.add_handler(CommandHandler("help", handle_help))
+    application.add_handler(CallbackQueryHandler(handle_callback_latest, pattern="^latest$"))
+    application.add_handler(CallbackQueryHandler(handle_callback_help, pattern="^help$"))
+    application.add_handler(CallbackQueryHandler(handle_callback_about, pattern="^about$"))
+    application.add_handler(CallbackQueryHandler(handle_callback_donate, pattern="^donate$"))
     application.add_handler(
         ChatMemberHandler(
             handle_my_chat_member, chat_member_types=ChatMemberHandler.MY_CHAT_MEMBER
