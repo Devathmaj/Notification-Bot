@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -12,6 +13,8 @@ from bot.discord.database.channel_targets import list_channel_targets
 from bot.discord.database.connection import get_session_factory
 from bot.discord.database.models import DeliveryMethod, SentMessage
 from bot.discord.database.preferences import list_preferences
+
+logger = logging.getLogger("discord.bot.notifications")
 
 _MENTION_CONTENT = {
     "here": "@here",
@@ -217,12 +220,15 @@ async def notify_for_post(client: discord.Client, post: dict[str, Any]) -> int:
     therefore goes out exactly once per post regardless of how many users there
     are trying to configure the same channel.
     """
-    embed = build_post_embed(post)
     post_id = str(post.get("id") or post.get("post_id"))
+    logger.info("Delivering Discord notification for post %s", post_id)
+
+    embed = build_post_embed(post)
 
     preferences = await list_preferences()
     targets = await list_channel_targets()
     if not preferences and not targets:
+        logger.info("No Discord subscribers for post %s", post_id)
         return 0
 
     already: set[tuple[str, str]] = set()
@@ -254,6 +260,7 @@ async def notify_for_post(client: discord.Client, post: dict[str, Any]) -> int:
                     )
                 )
                 sent += 1
+                logger.debug("Sent DM for post %s to user %s", post_id, pref.user_id)
 
         for target in targets:
             if (DeliveryMethod.channel, target.channel_id) in already:
@@ -274,6 +281,9 @@ async def notify_for_post(client: discord.Client, post: dict[str, Any]) -> int:
                     )
                 )
                 sent += 1
+                logger.debug("Sent channel feed for post %s to channel %s in guild %s",
+                             post_id, target.channel_id, target.guild_id)
         await session.commit()
 
+    logger.info("Delivered Discord notification for post %s to %d recipients", post_id, sent)
     return sent

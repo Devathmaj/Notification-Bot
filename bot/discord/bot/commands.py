@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 import discord
@@ -25,6 +26,8 @@ from bot.discord.database.preferences import (
 )
 from bot.rate_limit import RATE_LIMIT_TEXT, WindowRateLimiter, parse_rate
 from config import settings
+
+logger = logging.getLogger("discord.bot.commands")
 
 MAX_TOP = 100
 
@@ -166,9 +169,16 @@ async def _rate_limited(interaction: discord.Interaction) -> bool:
     """Consume the user's command budget; reply and return True when throttled."""
     if discord_limiter.allow(f"discord:{interaction.user.id}"):
         return False
+    logger.info("Rate limited user %s", interaction.user.id)
     if not interaction.response.is_done():
         await interaction.response.send_message(RATE_LIMIT_TEXT, ephemeral=True)
     return True
+
+
+def _log_command(interaction: discord.Interaction, command_name: str) -> None:
+    """Log a command invocation with user and context info."""
+    guild_id = interaction.guild.id if interaction.guild else "DM"
+    logger.info("Command /%s invoked by user %s in guild %s", command_name, interaction.user.id, guild_id)
 
 
 class NotificationCommands(commands.Cog):
@@ -179,6 +189,7 @@ class NotificationCommands(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def latest(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "latest")
         if await _rate_limited(interaction):
             return
         await interaction.response.defer(ephemeral=False)
@@ -195,6 +206,7 @@ class NotificationCommands(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def help(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "help")
         if await _rate_limited(interaction):
             return
         await interaction.response.send_message(embed=build_help_embed(), ephemeral=False)
@@ -205,6 +217,7 @@ class NotificationCommands(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def about(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "about")
         if await _rate_limited(interaction):
             return
         await interaction.response.send_message(embed=build_about_embed(), ephemeral=False)
@@ -216,6 +229,7 @@ class NotificationCommands(commands.Cog):
     async def top(
         self, interaction: discord.Interaction, n: app_commands.Range[int, 1, MAX_TOP]
     ) -> None:
+        _log_command(interaction, f"top({n})")
         if await _rate_limited(interaction):
             return
         await interaction.response.defer(ephemeral=False)
@@ -235,7 +249,9 @@ class NotificationCommands(commands.Cog):
 
     @notify.command(name="dm", description="Deliver notifications to you via DM")
     async def notify_dm(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "notify dm")
         await set_dm(interaction.user.id)
+        logger.info("User %s enabled DM notifications", interaction.user.id)
         await interaction.response.send_message(
             "Notifications will be sent to your DMs.", ephemeral=True
         )
@@ -254,6 +270,7 @@ class NotificationCommands(commands.Cog):
         channel: discord.TextChannel,
         mention: Literal["none", "here", "everyone"] = "none",
     ) -> None:
+        _log_command(interaction, f"notify channel {channel.id} mention={mention}")
         perms = channel.permissions_for(interaction.user)
         if not perms.manage_channels:
             await interaction.response.send_message(
@@ -276,6 +293,8 @@ class NotificationCommands(commands.Cog):
             interaction.user.id,
             mention=mention,
         )
+        logger.info("User %s configured channel feed for channel %s in guild %s with mention=%s",
+                    interaction.user.id, channel.id, interaction.guild.id, mention)
         labels = {"none": "No mentions", "here": "@here", "everyone": "@everyone"}
         message = f"Notification feed configured for {channel.mention} · {labels[mention]}"
         if mention != "none" and not channel.permissions_for(interaction.guild.me).mention_everyone:
@@ -287,6 +306,7 @@ class NotificationCommands(commands.Cog):
 
     @notify.command(name="list", description="Show your current notification settings")
     async def notify_list(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "notify list")
         pref = await get_preference(interaction.user.id)
         my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)
         mention_labels = {"none": "No mentions", "here": "@here", "everyone": "@everyone"}
@@ -333,9 +353,11 @@ class NotificationCommands(commands.Cog):
         target: app_commands.Choice[str],
         channel: discord.TextChannel | None = None,
     ) -> None:
+        _log_command(interaction, f"notify off {target.value}")
         kind = DeliveryMethod(target.value)
         if kind == DeliveryMethod.dm:
             await disable_dm(interaction.user.id)
+            logger.info("User %s disabled DM notifications", interaction.user.id)
             await interaction.response.send_message(
                 "Turned off DM notifications.", ephemeral=True
             )
@@ -366,6 +388,8 @@ class NotificationCommands(commands.Cog):
 
         await remove_channel_target(str(interaction.guild.id), str(channel.id))
         await purge_channel_sent_history(str(interaction.guild.id), str(channel.id))
+        logger.info("User %s removed channel feed for channel %s in guild %s",
+                    interaction.user.id, channel.id, interaction.guild.id)
         await interaction.response.send_message(
             f"Removed the notification feed for {channel.mention}.", ephemeral=True
         )
@@ -377,6 +401,7 @@ class NotificationCommands(commands.Cog):
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def delete_data(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "delete")
         pref_removed = await delete_preference(interaction.user.id)
         my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)
         feeds_removed = await delete_channel_targets_by_user(interaction.user.id)
@@ -398,4 +423,5 @@ class NotificationCommands(commands.Cog):
             message = "You have no stored notification data to delete."
         else:
             message = "Deleted your notification data: " + "; ".join(parts) + "."
+        logger.info("User %s deleted their data: %s", interaction.user.id, message)
         await interaction.response.send_message(message, ephemeral=True)

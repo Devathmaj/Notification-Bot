@@ -28,6 +28,16 @@ _PACE_SECONDS = 0.35
 telegram_limiter = WindowRateLimiter(*parse_rate(settings.telegram_command_rate))
 
 
+def _log_command(update: Update, command_name: str) -> None:
+    """Log a command invocation with user and chat info."""
+    user = update.effective_user
+    chat = update.effective_chat
+    user_id = user.id if user else "unknown"
+    chat_id = redact_chat_id(chat.id) if chat else "unknown"
+    chat_type = chat.type if chat else "unknown"
+    logger.info("Command /%s invoked by user %s in %s %s", command_name, user_id, chat_type, chat_id)
+
+
 def _rate_limited(handler):
     @wraps(handler)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -37,6 +47,7 @@ def _rate_limited(handler):
             else update.effective_chat.id
         )
         if not telegram_limiter.allow(f"telegram:{key}"):
+            logger.info("Rate limited user/chat %s", key)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id, text=RATE_LIMIT_TEXT
             )
@@ -118,6 +129,7 @@ async def _send_paced(update: Update, context: ContextTypes.DEFAULT_TYPE, text: 
 
 @_rate_limited
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "start")
     user = update.effective_user
     chat = update.effective_chat
     await upsert_telegram_user(
@@ -127,6 +139,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         first_name=user.first_name,
         last_name=user.last_name,
     )
+    logger.info("User %s subscribed in chat %s", user.id, redact_chat_id(chat.id))
     first = user.first_name or "there"
     await context.bot.send_message(
         chat_id=chat.id,
@@ -140,6 +153,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 @_rate_limited
 async def handle_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "latest")
     posts = await fetch_latest_posts(limit=1)
     if not posts:
         await _reply(update, context, "No notifications yet.")
@@ -149,6 +163,7 @@ async def handle_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 @_rate_limited
 async def handle_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "top")
     raw = " ".join(context.args or []).strip()
     try:
         n = int(raw)
@@ -167,19 +182,23 @@ async def handle_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 @_rate_limited
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "help")
     await _reply(update, context, HELP_TEXT, parse_mode="HTML")
 
 
 @_rate_limited
 async def handle_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "about")
     await _reply(update, context, ABOUT_TEXT, parse_mode="HTML")
 
 
 @_rate_limited
 async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "stop")
     chat = update.effective_chat
     deleted = await delete_telegram_user(chat.id)
     if deleted:
+        logger.info("User %s unsubscribed and data deleted from chat %s", chat.id, redact_chat_id(chat.id))
         await context.bot.send_message(
             chat_id=chat.id,
             text=(
@@ -188,6 +207,7 @@ async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             ),
         )
     else:
+        logger.info("User %s attempted to unsubscribe but was not subscribed in chat %s", chat.id, redact_chat_id(chat.id))
         await context.bot.send_message(
             chat_id=chat.id,
             text="You weren't subscribed, so there was nothing to delete. "

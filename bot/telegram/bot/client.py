@@ -46,11 +46,13 @@ def build_application(
         builder = builder.base_url(base)
     application = builder.build()
     register_handlers(application)
+    logger.info("Telegram application built")
     return application
 
 
 async def start_application(application: Application) -> None:
     """Initialize the app and register the Telegram webhook (webhook mode only)."""
+    logger.info("Starting Telegram application")
     await application.initialize()
     await application.start()
     if not settings.telegram_webhook_url:
@@ -74,10 +76,15 @@ async def start_application(application: Application) -> None:
         await application.bot.set_my_commands(
             _GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats()
         )
+        logger.info("Telegram command menu registered")
     except Exception:
         logger.warning("Could not register the Telegram command menu", exc_info=True)
 
+    bot_info = await application.bot.get_me()
+    logger.info("Telegram bot started as @%s (id=%s)", bot_info.username, bot_info.id)
+
 
 async def stop_application(application: Application) -> None:
+    logger.info("Stopping Telegram application")
     await application.stop()
     await application.shutdown()

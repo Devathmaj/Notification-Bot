@@ -43,8 +43,10 @@ class NotificationBot(commands.Bot):
             logger.debug("Could not deliver the error notice for %s", command_name)
 
     async def setup_hook(self) -> None:
+        logger.info("Setting up Discord bot (registering cogs, syncing commands)")
         await self.add_cog(NotificationCommands(self))
         await self.tree.sync()
+        logger.info("Discord bot setup complete")
 
 
 def build_bot() -> NotificationBot:
@@ -52,10 +54,23 @@ def build_bot() -> NotificationBot:
 
     @bot.event
     async def on_ready() -> None:
-        logger.info("Logged in as %s (id=%s)", bot.user, bot.user.id)
+        logger.info("Discord bot logged in as %s (id=%s)", bot.user, bot.user.id)
+        logger.info("Connected to %d guild(s)", len(bot.guilds))
         try:
             await bot.change_presence(activity=discord.CustomActivity(name=_BOT_STATUS))
         except discord.HTTPException:
             logger.warning("Could not set the bot's custom status")
+
+    @bot.event
+    async def on_resumed() -> None:
+        logger.info("Discord session resumed")
+
+    @bot.event
+    async def on_disconnect() -> None:
+        logger.warning("Discord connection lost")
+
+    @bot.event
+    async def on_connect() -> None:
+        logger.info("Discord connection established")
 
     return bot

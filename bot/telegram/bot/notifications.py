@@ -198,12 +198,15 @@ async def notify_for_post(application: Any, post: dict[str, Any]) -> int:
     Dedup is per (platform, kind, post, recipient), where recipient is a chat id
     (str), so webhook retries never double-send.
     """
-    text = render_post_message(post)
     post_id = str(post.get("id") or post.get("post_id"))
+    logger.info("Delivering Telegram notification for post %s", post_id)
+
+    text = render_post_message(post)
 
     users = await list_telegram_users()
     groups = await list_active_groups()
     if not users and not groups:
+        logger.info("No Telegram subscribers for post %s", post_id)
         return 0
 
     async with get_session_factory()() as session:
@@ -232,6 +235,7 @@ async def notify_for_post(application: Any, post: dict[str, Any]) -> int:
                     )
                 )
                 sent += 1
+                logger.debug("Sent DM for post %s to chat %s", post_id, redact_chat_id(chat_id))
                 await asyncio.sleep(_PACE_SECONDS)
 
         for group in groups:
@@ -250,7 +254,9 @@ async def notify_for_post(application: Any, post: dict[str, Any]) -> int:
                     )
                 )
                 sent += 1
+                logger.debug("Sent group message for post %s to chat %s", post_id, redact_chat_id(chat_id))
                 await asyncio.sleep(_PACE_SECONDS)
         await session.commit()
 
+    logger.info("Delivered Telegram notification for post %s to %d recipients", post_id, sent)
     return sent

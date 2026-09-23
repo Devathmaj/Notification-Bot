@@ -67,15 +67,22 @@ async def handle_event(
     platform.
     """
     post = validate_event(payload)
+    post_id = post.get("id")
+    logger.info("Processing webhook event for post %s", post_id)
     total = 0
     if client is not None:
         try:
-            total += await notify_discord(client, post)
+            sent = await notify_discord(client, post)
+            total += sent
+            logger.info("Discord delivered %d notifications for post %s", sent, post_id)
         except Exception:
-            logger.exception("Discord delivery failed for post %s", post.get("id"))
+            logger.exception("Discord delivery failed for post %s", post_id)
     if telegram_application is not None:
         try:
-            total += await notify_telegram(telegram_application, post)
+            sent = await notify_telegram(telegram_application, post)
+            total += sent
+            logger.info("Telegram delivered %d notifications for post %s", sent, post_id)
         except Exception:
-            logger.exception("Telegram delivery failed for post %s", post.get("id"))
+            logger.exception("Telegram delivery failed for post %s", post_id)
+    logger.info("Webhook event for post %s completed, total sent: %d", post_id, total)
     return total

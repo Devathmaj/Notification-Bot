@@ -7,17 +7,14 @@ import discord
 import uvicorn
 
 from bot.discord.database.connection import ensure_schema
+from bot.logging_utils import setup_logging
 
 # Import early so the Telegram tables are registered on the shared metadata
 # before ensure_schema() runs (they are created by Base.metadata.create_all).
 from bot.telegram.database import models as _telegram_models  # noqa: F401
 from config import settings
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
+setup_logging(logging.INFO)
 logger = logging.getLogger("main")
 
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60

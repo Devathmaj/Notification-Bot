@@ -45,6 +45,7 @@ def create_app(client: discord.Client, telegram_application: Application | None 
     async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Any:
         retry_after = getattr(exc, "retry_after", None)
         headers = {"Retry-After": str(int(retry_after)) if retry_after is not None else "60"}
+        logger.warning("Rate limit exceeded for %s", request.client.host if request.client else "unknown")
         return JSONResponse(
             status_code=429,
             content={"detail": "Too many requests. Please slow down."},
@@ -61,12 +62,16 @@ def create_app(client: discord.Client, telegram_application: Application | None 
     @app.post("/webhook", dependencies=[Depends(ensure_valid_bearer)])
     @limiter.limit(settings.webhook_rate_limit)
     async def webhook(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info("Webhook received from %s", client_ip)
         try:
             validate_event(payload)
         except InvalidEvent as exc:
+            logger.warning("Invalid webhook event from %s: %s", client_ip, exc)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         sent = await handle_event(payload, client, telegram_application)
+        logger.info("Webhook processed successfully, sent %d notifications", sent)
         return {"status": "ok", "sent": sent}
 
     @app.post("/telegram/webhook")
@@ -77,6 +82,7 @@ def create_app(client: discord.Client, telegram_application: Application | None 
         if settings.telegram_webhook_secret:
             token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
             if token != settings.telegram_webhook_secret:
+                logger.warning("Invalid Telegram webhook secret from %s", request.client.host if request.client else "unknown")
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
         payload = await request.json()
