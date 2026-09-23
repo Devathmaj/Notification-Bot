@@ -86,8 +86,16 @@ def create_app(client: discord.Client, telegram_application: Application | None 
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
         payload = await request.json()
+        client_ip = request.client.host if request.client else "unknown"
+        update_id = payload.get("update_id")
+        message = payload.get("message") or payload.get("edited_message") or payload.get("channel_post") or payload.get("edited_channel_post")
+        chat_id = message.get("chat", {}).get("id") if message else None
+        text = message.get("text") if message else None
+        logger.info("Telegram webhook received from %s: update_id=%s chat_id=%s text=%s", client_ip, update_id, chat_id, text[:50] if text else None)
+
         update = Update.de_json(payload, telegram_application.bot)
         await telegram_application.process_update(update)
+        logger.debug("Telegram update %s processed", update_id)
         return {"status": "ok"}
 
     return app
