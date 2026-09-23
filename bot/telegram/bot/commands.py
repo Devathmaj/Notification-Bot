@@ -85,7 +85,7 @@ HELP_TEXT = (
     "• /start — subscribe to notifications in this private chat\n"
     "• /latest — show the newest notification with its full details (vendor, "
     "discount, voucher code, certifications, expiry)\n"
-    "• /top <n> — show the n most recent notifications, newest first "
+    "• /top &lt;n&gt; — show the n most recent notifications, newest first "
     "(1–100)\n"
     "• /about — learn what this bot is about and find useful links\n"
     "• /donate — show ways to support VoucherBot\n"
@@ -121,7 +121,7 @@ ABOUT_TEXT = (
     "<b>What I do here</b>\n"
     "• Push each new listing to this private chat (after /start) and to any group "
     "I'm added to.\n"
-    "• Answer on-demand queries: /latest for the newest post, /top <n> for the "
+    "• Answer on-demand queries: /latest for the newest post, /top &lt;n&gt; for the "
     "recent ones.\n"
     "• Deliver each alert exactly once — retries are deduplicated.\n"
     "• Stay privacy-first: /stop erases your subscription data anytime.\n\n"
@@ -230,7 +230,7 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         chat_id=chat.id,
         text=(
             f"Hi {first}! You are now subscribed to notifications here.\n\n"
-            "Use /latest for the newest post, /top <n> for recent ones, "
+            "Use /latest for the newest post, /top &lt;n&gt; for recent ones, "
             "/about to learn what this bot is about, and /help for more information."
         ),
         reply_markup=MAIN_KEYBOARD,
