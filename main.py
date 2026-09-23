@@ -19,13 +19,13 @@ logger = logging.getLogger("main")
 
 _RETENTION_INTERVAL_SECONDS = 6 * 60 * 60
 
-# Discord startup retry policy. When a probe gets 429'd, Discord's own
+# Discord startup retry policy. When a check gets 429'd, Discord's own
 # Retry-After is authoritative: we follow it (+ small buffer, sanity-clamped)
-# for as long as it takes — the probe runs as a background task, so nothing
+# for as long as it takes — the check runs as a background task, so nothing
 # else is delayed and each retry is one tiny request timed by Discord itself.
 # Without a hint we fall back to a capped exponential schedule. The only
 # permanent failure is a rejected token (401), which stops immediately.
-# bot.start() itself runs exactly once per process; only the probe retries.
+# bot.start() itself runs exactly once per process; only the check retries.
 _DISCORD_FALLBACK_DELAYS = (30, 60, 120, 240, 480, 600)
 _DISCORD_MAX_FALLBACK_DELAY = 600
 _DISCORD_MAX_HINT_SECONDS = 3600
@@ -35,10 +35,10 @@ _DISCORD_API_URL = "https://discord.com/api/v10"
 _sleep = asyncio.sleep  # indirect so tests can observe waits
 
 
-async def _probe_discord_auth(token: str) -> tuple[int | None, int | None]:
-    """Single Discord auth probe.
+async def _check_discord_api(token: str) -> tuple[int | None, int | None, dict | None]:
+    """Check Discord API availability.
 
-    Returns (HTTP status, server-provided Retry-After in seconds if sent).
+    Returns (HTTP status, server-provided Retry-After in seconds if sent, rate limit headers).
     Status is None on network errors.
     """
     import aiohttp
@@ -57,13 +57,30 @@ async def _probe_discord_auth(token: str) -> tuple[int | None, int | None]:
                         retry_after = max(0, int(float(raw)))
                     except ValueError:
                         retry_after = None
-                return resp.status, retry_after
-    except (aiohttp.ClientError, OSError, TimeoutError):
-        return None, None
+
+                # Capture rate limit headers for diagnostics
+                rate_limit_headers = {
+                    "retry_after": retry_after,
+                    "x_ratelimit_global": resp.headers.get("X-RateLimit-Global"),
+                    "x_ratelimit_remaining": resp.headers.get("X-RateLimit-Remaining"),
+                    "x_ratelimit_reset_after": resp.headers.get("X-RateLimit-Reset-After"),
+                }
+
+                # Read response body for diagnostics (Discord often includes useful info in 429 responses)
+                body = None
+                try:
+                    body = await resp.json()
+                except Exception:
+                    body = await resp.text()
+
+                return resp.status, retry_after, rate_limit_headers
+    except (aiohttp.ClientError, OSError, TimeoutError) as e:
+        logger.debug("Discord API check network error: %s", e)
+        return None, None, None
 
 
 async def _start_discord_when_ready(bot: discord.Client) -> None:
-    """Wait for Discord auth to succeed, then start the bot once.
+    """Wait for Discord API to be available, then start the bot once.
 
     Retry timing follows Discord's own Retry-After when provided (plus a
     small buffer) for as long as it takes; without a hint it falls back to
@@ -76,17 +93,31 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
     attempt = 0
     while True:
         attempt += 1
-        status, hint = await _probe_discord_auth(token)
+        status, retry_after, rate_limit_headers = await _check_discord_api(token)
         if status == 200:
+            logger.info("Discord API check passed, starting bot")
             await bot.start(token)
             return
         if status == 401:
-            logger.error("Discord rejected the bot token; Discord stays down until restart")
+            logger.error("Discord rejected the bot token; Discord bot stays down until restart")
             return
 
+        # Build diagnostic log message with all available rate limit info
         reason = f"HTTP {status}" if status is not None else "network error"
-        if hint is not None:
-            wait = min(max(hint, 1) + _DISCORD_RETRY_BUFFER_SECONDS, _DISCORD_MAX_HINT_SECONDS)
+        rate_limit_info = ""
+        if rate_limit_headers:
+            parts = []
+            if rate_limit_headers.get("x_ratelimit_global") is not None:
+                parts.append(f"global={rate_limit_headers['x_ratelimit_global']}")
+            if rate_limit_headers.get("x_ratelimit_remaining") is not None:
+                parts.append(f"remaining={rate_limit_headers['x_ratelimit_remaining']}")
+            if rate_limit_headers.get("x_ratelimit_reset_after") is not None:
+                parts.append(f"reset_after={rate_limit_headers['x_ratelimit_reset_after']}s")
+            if parts:
+                rate_limit_info = f" — rate limits: {', '.join(parts)}"
+
+        if retry_after is not None:
+            wait = min(max(retry_after, 1) + _DISCORD_RETRY_BUFFER_SECONDS, _DISCORD_MAX_HINT_SECONDS)
             basis = f"following Discord's retry-after ({wait}s)"
         else:
             fallback = _DISCORD_FALLBACK_DELAYS[min(attempt, len(_DISCORD_FALLBACK_DELAYS)) - 1]
@@ -94,9 +125,10 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
             basis = f"no retry hint — backing off ({wait}s)"
 
         logger.warning(
-            "Discord API not ready (attempt %d): %s — %s",
+            "Discord API not ready (attempt %d): %s%s — %s",
             attempt,
             reason,
+            rate_limit_info,
             basis,
         )
         await _sleep(wait)
