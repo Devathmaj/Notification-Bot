@@ -44,6 +44,29 @@ _HELP_URLS = {
     "permissions": "https://voucherbot.pages.dev/#discord/permissions",
 }
 
+_DONATE_OPTIONS = [
+    {
+        "name": "Buy Me a Coffee",
+        "url": "https://buymeacoffee.com/devathmaj",
+        "description": "A quick one-time thank-you — like buying the developer a coffee.",
+    },
+    {
+        "name": "PayPal",
+        "url": "https://paypal.me/Devathmaj",
+        "description": "Send a one-time donation of any amount via PayPal.",
+    },
+    {
+        "name": "Patreon",
+        "url": "https://www.patreon.com/cw/devathmaj",
+        "description": "Subscribe for ongoing support and behind-the-scenes updates.",
+    },
+    {
+        "name": "UPI",
+        "url": "upi://pay?pa=devathmaj@oksbi",
+        "description": "Send directly via any UPI app (ID: devathmaj@oksbi).",
+    },
+]
+
 
 def build_about_embed() -> discord.Embed:
     embed = discord.Embed(
@@ -90,7 +113,10 @@ def build_about_embed() -> discord.Embed:
     )
     embed.add_field(
         name="Commands",
-        value="Use `/help` to see all available commands and what they do.",
+        value=(
+            "Use `/help` to see all available commands and what they do.\n"
+            "Support the developers by checking out `/donate`."
+        ),
         inline=False,
     )
     return embed
@@ -135,6 +161,7 @@ def build_help_embed() -> discord.Embed:
             "`/delete` — Erase all your stored data: DM preference, channel "
             "feeds you created, and the associated delivery history.\n"
             "`/about` — Learn what this bot is about and find useful links.\n"
+            "`/donate` — Show ways to support VoucherBot.\n"
             "`/help` — Show this message."
         ),
         inline=False,
@@ -162,8 +189,47 @@ def build_help_embed() -> discord.Embed:
     )
     return embed
 
-discord_limiter = WindowRateLimiter(*parse_rate(settings.discord_command_rate))
 
+def build_donate_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="Support VoucherBot",
+        description=(
+            "VoucherBot automatically discovers certification discounts, free exam vouchers, "
+            "beta exam opportunities, and training promotions — and pushes them to you "
+            "the moment they appear. It runs 24/7 so you never miss a deal.\n\n"
+            "After setting up the notification service, the Render free tier no longer covers "
+            "two instances running around the clock. Your support helps keep everything "
+            "online and growing."
+        ),
+        color=_HELP_COLOR,
+    )
+
+    lines = []
+    for opt in _DONATE_OPTIONS:
+        lines.append(f"**[{opt['name']}]({opt['url']})** — {opt['description']}")
+
+    embed.add_field(
+        name="Ways to support",
+        value="\n".join(lines),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="Every bit helps",
+        value=(
+            "Even a small contribution goes a long way — it covers server costs, keeps the "
+            "notification bots running, and lets us add new certification sources and features. "
+            "If VoucherBot has helped you save on an exam, consider giving back so it can "
+            "help others too.\n\n"
+            "Thank you for being part of the community."
+        ),
+        inline=False,
+    )
+
+    return embed
+
+
+discord_limiter = WindowRateLimiter(*parse_rate(settings.discord_command_rate))
 
 async def _rate_limited(interaction: discord.Interaction) -> bool:
     """Consume the user's command budget; reply and return True when throttled."""
@@ -221,6 +287,17 @@ class NotificationCommands(commands.Cog):
         if await _rate_limited(interaction):
             return
         await interaction.response.send_message(embed=build_about_embed(), ephemeral=False)
+
+    @app_commands.command(
+        name="donate", description="Show ways to support VoucherBot"
+    )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    async def donate(self, interaction: discord.Interaction) -> None:
+        _log_command(interaction, "donate")
+        if await _rate_limited(interaction):
+            return
+        await interaction.response.send_message(embed=build_donate_embed(), ephemeral=False)
 
     @app_commands.command(name="top", description="Fetch the `n` most recent notifications (1-100)")
     @app_commands.describe(n="How many notifications to fetch")

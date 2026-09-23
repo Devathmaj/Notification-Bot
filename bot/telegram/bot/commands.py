@@ -67,9 +67,10 @@ HELP_TEXT = (
     "• /start — subscribe to notifications in this private chat\n"
     "• /latest — show the newest notification with its full details (vendor, "
     "discount, voucher code, certifications, expiry)\n"
-    "• /top &lt;n&gt; — show the n most recent notifications, newest first "
+    "• /top <n> — show the n most recent notifications, newest first "
     "(1–100)\n"
     "• /about — learn what this bot is about and find useful links\n"
+    "• /donate — show ways to support VoucherBot\n"
     "• /stop — unsubscribe and delete your stored data\n"
     "• /help — show this message\n\n"
     "<b>Behaviour</b>\n"
@@ -102,7 +103,7 @@ ABOUT_TEXT = (
     "<b>What I do here</b>\n"
     "• Push each new listing to this private chat (after /start) and to any group "
     "I'm added to.\n"
-    "• Answer on-demand queries: /latest for the newest post, /top &lt;n&gt; for the "
+    "• Answer on-demand queries: /latest for the newest post, /top <n> for the "
     "recent ones.\n"
     "• Deliver each alert exactly once — retries are deduplicated.\n"
     "• Stay privacy-first: /stop erases your subscription data anytime.\n\n"
@@ -110,7 +111,29 @@ ABOUT_TEXT = (
     "The collection pipeline is open source: "
     "<a href=\"https://github.com/Devathmaj/VoucherBot\">github.com/Devathmaj/VoucherBot</a>\n\n"
     "<b>Commands</b>\n"
-    "Use /help to see all available commands and what they do."
+    "Use /help to see all available commands and what they do.\n"
+    "Support the developers by checking out /donate."
+)
+
+DONATE_TEXT = (
+    "<b>Support VoucherBot</b>\n\n"
+    "VoucherBot automatically discovers certification discounts, free exam vouchers, "
+    "beta exam opportunities, and training promotions — and pushes them to you "
+    "the moment they appear. It runs 24/7 so you never miss a deal.\n\n"
+    "After setting up the notification service, the Render free tier no longer covers "
+    "two instances running around the clock. Your support helps keep everything "
+    "online and growing.\n\n"
+    "<b>Ways to support</b>\n"
+    "• <a href=\"https://buymeacoffee.com/devathmaj\"><b>Buy Me a Coffee</b></a> — A quick one-time thank-you — like buying the developer a coffee.\n"
+    "• <a href=\"https://paypal.me/Devathmaj\"><b>PayPal</b></a> — Send a one-time donation of any amount via PayPal.\n"
+    "• <a href=\"https://www.patreon.com/cw/devathmaj\"><b>Patreon</b></a> — Subscribe for ongoing support and behind-the-scenes updates.\n"
+    "• <b>UPI</b> — Send directly via any UPI app (ID: <code>devathmaj@oksbi</code>).\n\n"
+    "<b>Every bit helps</b>\n"
+    "Even a small contribution goes a long way — it covers server costs, keeps the "
+    "notification bots running, and lets us add new certification sources and features. "
+    "If VoucherBot has helped you save on an exam, consider giving back so it can "
+    "help others too.\n\n"
+    "Thank you for being part of the community."
 )
 
 
@@ -193,6 +216,12 @@ async def handle_about(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @_rate_limited
+async def handle_donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    _log_command(update, "donate")
+    await _reply(update, context, DONATE_TEXT, parse_mode="HTML")
+
+
+@_rate_limited
 async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_command(update, "stop")
     chat = update.effective_chat
@@ -236,6 +265,7 @@ def register_handlers(application) -> None:
     application.add_handler(CommandHandler("latest", handle_latest))
     application.add_handler(CommandHandler("top", handle_top))
     application.add_handler(CommandHandler("about", handle_about))
+    application.add_handler(CommandHandler("donate", handle_donate))
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(
         ChatMemberHandler(
