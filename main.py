@@ -58,12 +58,16 @@ async def _check_discord_api(token: str) -> tuple[int | None, int | None, dict |
                     except ValueError:
                         retry_after = None
 
-                # Capture rate limit headers for diagnostics
+                # Capture all rate limit headers for diagnostics
                 rate_limit_headers = {
                     "retry_after": retry_after,
                     "x_ratelimit_global": resp.headers.get("X-RateLimit-Global"),
+                    "x_ratelimit_bucket": resp.headers.get("X-RateLimit-Bucket"),
+                    "x_ratelimit_limit": resp.headers.get("X-RateLimit-Limit"),
                     "x_ratelimit_remaining": resp.headers.get("X-RateLimit-Remaining"),
+                    "x_ratelimit_reset": resp.headers.get("X-RateLimit-Reset"),
                     "x_ratelimit_reset_after": resp.headers.get("X-RateLimit-Reset-After"),
+                    "date": resp.headers.get("Date"),
                 }
 
                 # Read response body for diagnostics (Discord often includes useful info in 429 responses)
@@ -73,7 +77,26 @@ async def _check_discord_api(token: str) -> tuple[int | None, int | None, dict |
                 except Exception:
                     body = await resp.text()
 
-                return resp.status, retry_after, rate_limit_headers
+                # Enhanced diagnostic logging for 429 responses
+                if resp.status == 429:
+                    is_global = rate_limit_headers.get("x_ratelimit_global") == "true"
+                    logger.warning(
+                        "Discord 429 received on /users/@me check: "
+                        "status=%d retry_after=%s global=%s bucket=%s limit=%s remaining=%s "
+                        "reset=%s reset_after=%s date=%s body=%s",
+                        resp.status,
+                        rate_limit_headers.get("retry_after"),
+                        rate_limit_headers.get("x_ratelimit_global"),
+                        rate_limit_headers.get("x_ratelimit_bucket"),
+                        rate_limit_headers.get("x_ratelimit_limit"),
+                        rate_limit_headers.get("x_ratelimit_remaining"),
+                        rate_limit_headers.get("x_ratelimit_reset"),
+                        rate_limit_headers.get("x_ratelimit_reset_after"),
+                        rate_limit_headers.get("date"),
+                        body,
+                    )
+
+                return resp.status, retry_after, {"headers": rate_limit_headers, "body": body}
     except (aiohttp.ClientError, OSError, TimeoutError) as e:
         logger.debug("Discord API check network error: %s", e)
         return None, None, None
@@ -93,7 +116,8 @@ async def _start_discord_when_ready(bot: discord.Client) -> None:
     attempt = 0
     while True:
         attempt += 1
-        status, retry_after, rate_limit_headers = await _check_discord_api(token)
+        status, retry_after, rate_limit_data = await _check_discord_api(token)
+        rate_limit_headers = rate_limit_data["headers"] if rate_limit_data else {}
         if status == 200:
             logger.info("Discord API check passed, starting bot")
             await bot.start(token)
