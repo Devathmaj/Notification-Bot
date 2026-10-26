@@ -244,7 +244,12 @@ async def _rate_limited(interaction: discord.Interaction) -> bool:
 def _log_command(interaction: discord.Interaction, command_name: str) -> None:
     """Log a command invocation with user and context info."""
     guild_id = interaction.guild.id if interaction.guild else "DM"
-    logger.info("Command /%s invoked by user %s in guild %s", command_name, interaction.user.id, guild_id)
+    logger.info(
+        "Command /%s invoked by user %s in guild %s",
+        command_name,
+        interaction.user.id,
+        guild_id,
+    )
 
 
 class NotificationCommands(commands.Cog):
@@ -327,9 +332,10 @@ class NotificationCommands(commands.Cog):
     @notify.command(name="dm", description="Deliver notifications to you via DM")
     async def notify_dm(self, interaction: discord.Interaction) -> None:
         _log_command(interaction, "notify dm")
+        await interaction.response.defer(ephemeral=True)
         await set_dm(interaction.user.id)
         logger.info("User %s enabled DM notifications", interaction.user.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Notifications will be sent to your DMs.", ephemeral=True
         )
 
@@ -348,16 +354,17 @@ class NotificationCommands(commands.Cog):
         mention: Literal["none", "here", "everyone"] = "none",
     ) -> None:
         _log_command(interaction, f"notify channel {channel.id} mention={mention}")
+        await interaction.response.defer(ephemeral=True)
         perms = channel.permissions_for(interaction.user)
         if not perms.manage_channels:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"You need the 'Manage Channels' permission in {channel.mention} "
                 "to set up a notification feed there.",
                 ephemeral=True,
             )
             return
         if mention != "none" and not perms.mention_everyone:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"You need the 'Mention @everyone, @here, and All Roles' permission "
                 f"in {channel.mention} to enable @here/@everyone mentions.",
                 ephemeral=True,
@@ -379,16 +386,17 @@ class NotificationCommands(commands.Cog):
                 "\n\u26a0\ufe0f I don't have the 'Mention @everyone, @here, and All Roles' "
                 "permission here, so the mention won't work."
             )
-        await interaction.response.send_message(message, ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True)
 
     @notify.command(name="list", description="Show your current notification settings")
     async def notify_list(self, interaction: discord.Interaction) -> None:
         _log_command(interaction, "notify list")
+        await interaction.response.defer(ephemeral=True)
         pref = await get_preference(interaction.user.id)
         my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)
         mention_labels = {"none": "No mentions", "here": "@here", "everyone": "@everyone"}
         if (pref is None or not pref.dm_enabled) and not my_targets:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "You currently have no notifications enabled. "
                 "Use `/notify dm` or `/notify channel` to set one up.",
                 ephemeral=True,
@@ -411,7 +419,7 @@ class NotificationCommands(commands.Cog):
         else:
             lines.append("**Channel feeds** — none")
 
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
 
     @notify.command(name="off", description="Turn notifications off for one delivery method")
     @app_commands.choices(
@@ -431,17 +439,18 @@ class NotificationCommands(commands.Cog):
         channel: discord.TextChannel | None = None,
     ) -> None:
         _log_command(interaction, f"notify off {target.value}")
+        await interaction.response.defer(ephemeral=True)
         kind = DeliveryMethod(target.value)
         if kind == DeliveryMethod.dm:
             await disable_dm(interaction.user.id)
             logger.info("User %s disabled DM notifications", interaction.user.id)
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Turned off DM notifications.", ephemeral=True
             )
             return
 
         if channel is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Pick the channel whose feed you want to remove "
                 "(e.g. `/notify off target: Channel channel: #announcements`).",
                 ephemeral=True,
@@ -449,14 +458,14 @@ class NotificationCommands(commands.Cog):
             return
         target_row = await get_channel_target(str(interaction.guild.id), str(channel.id))
         if target_row is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"No notification feed is configured for {channel.mention}.",
                 ephemeral=True,
             )
             return
         perms = channel.permissions_for(interaction.user)
         if target_row.set_by_user_id != interaction.user.id and not perms.manage_channels:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Only the user who set up this feed or someone with "
                 f"'Manage Channels' in {channel.mention} can remove it.",
                 ephemeral=True,
@@ -467,7 +476,7 @@ class NotificationCommands(commands.Cog):
         await purge_channel_sent_history(str(interaction.guild.id), str(channel.id))
         logger.info("User %s removed channel feed for channel %s in guild %s",
                     interaction.user.id, channel.id, interaction.guild.id)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"Removed the notification feed for {channel.mention}.", ephemeral=True
         )
 
@@ -479,6 +488,7 @@ class NotificationCommands(commands.Cog):
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     async def delete_data(self, interaction: discord.Interaction) -> None:
         _log_command(interaction, "delete")
+        await interaction.response.defer(ephemeral=True)
         pref_removed = await delete_preference(interaction.user.id)
         my_targets = await list_channel_targets(set_by_user_id=interaction.user.id)
         feeds_removed = await delete_channel_targets_by_user(interaction.user.id)
@@ -501,4 +511,4 @@ class NotificationCommands(commands.Cog):
         else:
             message = "Deleted your notification data: " + "; ".join(parts) + "."
         logger.info("User %s deleted their data: %s", interaction.user.id, message)
-        await interaction.response.send_message(message, ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True)
